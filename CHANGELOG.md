@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Browser: persist the live ChatGPT model label in session runtime metadata, show it in `oracle session`, and include it in browser finish-line details so manual-login runs can confirm the actual UI model without asking the model to self-report.
+
 ## 0.9.0 — 2026-03-08
 
 ### Changed

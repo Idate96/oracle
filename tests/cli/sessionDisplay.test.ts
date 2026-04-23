@@ -260,6 +260,27 @@ describe("attachSession rendering", () => {
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("gpt-5.2-pro"));
   });
 
+  test("prints the captured browser model label when available", async () => {
+    const browserMeta: SessionMetadata = {
+      ...baseMeta,
+      mode: "browser",
+      browser: {
+        runtime: {
+          chromePort: 9222,
+          activeModelLabel: "GPT-5.5 Pro",
+        },
+      },
+    } as SessionMetadata;
+    readSessionMetadataMock.mockResolvedValue(browserMeta);
+    readSessionLogMock.mockResolvedValue("Answer:\nhello");
+    readSessionRequestMock.mockResolvedValue({ prompt: "Prompt here" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await attachSession("sess", { renderMarkdown: false });
+
+    expect(logSpy).toHaveBeenCalledWith("Browser model: GPT-5.5 Pro");
+  });
+
   test("renders markdown when requested and rich tty", async () => {
     readSessionMetadataMock.mockResolvedValue(baseMeta);
     readSessionLogMock.mockResolvedValue("Answer:\nhello *world*");

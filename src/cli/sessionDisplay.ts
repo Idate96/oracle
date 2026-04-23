@@ -256,6 +256,10 @@ export async function attachSession(
     } else if (metadata.model) {
       console.log(`Model: ${metadata.model}`);
     }
+    const browserModelLabel = metadata.browser?.runtime?.activeModelLabel?.trim();
+    if (browserModelLabel) {
+      console.log(`Browser model: ${browserModelLabel}`);
+    }
     const responseSummary = formatResponseMetadata(metadata.response);
     if (responseSummary) {
       console.log(dim(`Response: ${responseSummary}`));

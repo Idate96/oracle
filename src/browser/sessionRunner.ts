@@ -153,6 +153,7 @@ export async function runBrowserSessionExecution(
     tokensPart,
     detailParts: [
       runOptions.file && runOptions.file.length > 0 ? `files=${runOptions.file.length}` : null,
+      browserResult.activeModelLabel ? `ui=${browserResult.activeModelLabel}` : null,
     ],
   });
   log(chalk.blue(line1));
@@ -168,6 +169,7 @@ export async function runBrowserSessionExecution(
       chromeHost: browserResult.chromeHost,
       userDataDir: browserResult.userDataDir,
       controllerPid: browserResult.controllerPid ?? process.pid,
+      activeModelLabel: browserResult.activeModelLabel,
     },
     answerText,
   };

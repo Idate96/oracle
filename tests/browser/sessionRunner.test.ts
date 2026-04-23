@@ -22,6 +22,7 @@ describe("runBrowserSessionExecution", () => {
         chromeHost: "127.0.0.1",
         chromeTargetId: "t-1",
         tabUrl: "https://chatgpt.com/c/foo",
+        activeModelLabel: "GPT-5.5 Pro",
       });
       return {
         answerText: "ok",
@@ -29,6 +30,7 @@ describe("runBrowserSessionExecution", () => {
         tookMs: 1000,
         answerTokens: 12,
         answerChars: 20,
+        activeModelLabel: "GPT-5.5 Pro",
       };
     });
     const result = await runBrowserSessionExecution(
@@ -62,8 +64,14 @@ describe("runBrowserSessionExecution", () => {
     });
     expect(result.runtime).toMatchObject({ chromePid: undefined });
     expect(persistRuntimeHint).toHaveBeenCalledWith(
-      expect.objectContaining({ chromePort: 9999, chromeHost: "127.0.0.1", chromeTargetId: "t-1" }),
+      expect.objectContaining({
+        chromePort: 9999,
+        chromeHost: "127.0.0.1",
+        chromeTargetId: "t-1",
+        activeModelLabel: "GPT-5.5 Pro",
+      }),
     );
+    expect(result.runtime.activeModelLabel).toBe("GPT-5.5 Pro");
     expect(log).toHaveBeenCalled();
   });
 
@@ -256,6 +264,7 @@ describe("runBrowserSessionExecution", () => {
           tookMs: 100,
           answerTokens: 5,
           answerChars: 10,
+          activeModelLabel: "GPT-5.5 Pro",
         }),
       },
     );
@@ -267,6 +276,7 @@ describe("runBrowserSessionExecution", () => {
     expect(finishedLine).toContain("[browser]");
     expect(finishedLine).not.toContain("tok(");
     expect(finishedLine).not.toContain("tokens (");
+    expect(log.mock.calls.some((call) => String(call[0]).includes("ui=GPT-5.5 Pro"))).toBe(true);
   });
 
   test("non-verbose output keeps short token label", async () => {

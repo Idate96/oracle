@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   ensureModelSelection,
+  readCurrentModelLabel,
   waitForAssistantResponse,
   uploadAttachmentFile,
   waitForAttachmentCompletion,
@@ -64,6 +65,16 @@ describe("ensureModelSelection", () => {
     await expect(ensureModelSelection(runtime, "Instant", logger)).rejects.toThrow(
       /Unable to locate the ChatGPT model selector button/,
     );
+  });
+});
+
+describe("readCurrentModelLabel", () => {
+  test("returns the trimmed browser model label", async () => {
+    const runtime = {
+      evaluate: vi.fn().mockResolvedValue({ result: { value: " GPT-5.5 Pro " } }),
+    } as unknown as ChromeClient["Runtime"];
+
+    await expect(readCurrentModelLabel(runtime)).resolves.toBe("GPT-5.5 Pro");
   });
 });
 

@@ -58,6 +58,21 @@ export async function ensureModelSelection(
   }
 }
 
+export async function readCurrentModelLabel(
+  Runtime: ChromeClient["Runtime"],
+): Promise<string | null> {
+  const outcome = await Runtime.evaluate({
+    expression: `(() => {
+      const button = document.querySelector(${JSON.stringify(MODEL_BUTTON_SELECTOR)});
+      const label = button?.textContent?.trim() ?? "";
+      return label.length > 0 ? label : null;
+    })()`,
+    returnByValue: true,
+  });
+  const label = outcome.result?.value;
+  return typeof label === "string" && label.trim().length > 0 ? label.trim() : null;
+}
+
 /**
  * Builds the DOM expression that runs inside the ChatGPT tab to select a model.
  * The string is evaluated inside Chrome, so keep it self-contained and well-commented.

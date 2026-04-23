@@ -6,7 +6,7 @@ export {
   ensurePromptReady,
   installJavaScriptDialogAutoDismissal,
 } from "./actions/navigation.js";
-export { ensureModelSelection } from "./actions/modelSelection.js";
+export { ensureModelSelection, readCurrentModelLabel } from "./actions/modelSelection.js";
 export { submitPrompt, clearPromptComposer } from "./actions/promptComposer.js";
 export {
   clearComposerAttachments,

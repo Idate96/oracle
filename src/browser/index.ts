@@ -28,6 +28,7 @@ import {
   ensurePromptReady,
   installJavaScriptDialogAutoDismissal,
   ensureModelSelection,
+  readCurrentModelLabel,
   clearPromptComposer,
   waitForAssistantResponse,
   captureAssistantMarkdown,
@@ -97,6 +98,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
   const runtimeHintCb = options.runtimeHintCb;
   let lastTargetId: string | undefined;
   let lastUrl: string | undefined;
+  let activeModelLabel: string | undefined;
   const emitRuntimeHint = async (): Promise<void> => {
     if (!runtimeHintCb || !chrome?.port) {
       return;
@@ -109,6 +111,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       chromeTargetId: lastTargetId,
       tabUrl: lastUrl,
       conversationId,
+      activeModelLabel,
       userDataDir,
       controllerPid: process.pid,
     };
@@ -434,6 +437,13 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           conversationHintInFlight = null;
         });
     };
+    const refreshActiveModelLabel = async (): Promise<void> => {
+      const label = await readCurrentModelLabel(Runtime).catch(() => null);
+      if (label) {
+        activeModelLabel = label;
+      }
+      await emitRuntimeHint();
+    };
     await captureRuntimeSnapshot();
     const modelStrategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY;
     if (config.desiredModel && modelStrategy !== "ignore") {
@@ -464,8 +474,12 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       logger(
         `Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`,
       );
+      await refreshActiveModelLabel();
     } else if (modelStrategy === "ignore") {
       logger("Model picker: skipped (strategy=ignore)");
+      await refreshActiveModelLabel();
+    } else {
+      await refreshActiveModelLabel();
     }
     // Handle thinking time selection if specified
     const thinkingTime = config.thinkingTime;
@@ -707,6 +721,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
               chromeTargetId: lastTargetId,
               tabUrl: lastUrl,
               conversationId: lastUrl ? extractConversationIdFromUrl(lastUrl) : undefined,
+              activeModelLabel,
               controllerPid: process.pid,
             },
           },
@@ -751,6 +766,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
             chromeTargetId: lastTargetId,
             tabUrl: lastUrl,
             conversationId: lastUrl ? extractConversationIdFromUrl(lastUrl) : undefined,
+            activeModelLabel,
             controllerPid: process.pid,
           };
           throw new BrowserAutomationError(
@@ -935,6 +951,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       userDataDir,
       chromeTargetId: lastTargetId,
       tabUrl: lastUrl,
+      activeModelLabel,
       controllerPid: process.pid,
     };
   } catch (error) {
@@ -951,6 +968,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         userDataDir,
         chromeTargetId: lastTargetId,
         tabUrl: lastUrl,
+        activeModelLabel,
         controllerPid: process.pid,
       };
       const reuseProfileHint =
@@ -992,6 +1010,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           userDataDir,
           chromeTargetId: lastTargetId,
           tabUrl: lastUrl,
+          activeModelLabel,
           controllerPid: process.pid,
         },
       },
@@ -1275,6 +1294,7 @@ async function runRemoteBrowserMode(
   let client: ChromeClient | null = null;
   let remoteTargetId: string | null = null;
   let lastUrl: string | undefined;
+  let activeModelLabel: string | undefined;
   const runtimeHintCb = options.runtimeHintCb;
   const emitRuntimeHint = async () => {
     if (!runtimeHintCb) return;
@@ -1284,6 +1304,7 @@ async function runRemoteBrowserMode(
         chromeHost: host,
         chromeTargetId: remoteTargetId ?? undefined,
         tabUrl: lastUrl,
+        activeModelLabel,
         controllerPid: process.pid,
       });
     } catch (error) {
@@ -1309,6 +1330,13 @@ async function runRemoteBrowserMode(
     };
     client.on("disconnect", markConnectionLost);
     const { Network, Page, Runtime, Input, DOM } = client;
+    const refreshActiveModelLabel = async (): Promise<void> => {
+      const label = await readCurrentModelLabel(Runtime).catch(() => null);
+      if (label) {
+        activeModelLabel = label;
+      }
+      await emitRuntimeHint();
+    };
 
     const domainEnablers = [Network.enable({}), Page.enable(), Runtime.enable()];
     if (DOM && typeof DOM.enable === "function") {
@@ -1360,8 +1388,12 @@ async function runRemoteBrowserMode(
       logger(
         `Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`,
       );
+      await refreshActiveModelLabel();
     } else if (modelStrategy === "ignore") {
       logger("Model picker: skipped (strategy=ignore)");
+      await refreshActiveModelLabel();
+    } else {
+      await refreshActiveModelLabel();
     }
     // Handle thinking time selection if specified
     const thinkingTime = config.thinkingTime;
@@ -1529,6 +1561,7 @@ async function runRemoteBrowserMode(
               chromeTargetId: remoteTargetId ?? undefined,
               tabUrl: lastUrl,
               conversationId: lastUrl ? extractConversationIdFromUrl(lastUrl) : undefined,
+              activeModelLabel,
               controllerPid: process.pid,
             },
           },
@@ -1575,6 +1608,7 @@ async function runRemoteBrowserMode(
             chromeTargetId: remoteTargetId ?? undefined,
             tabUrl: lastUrl,
             conversationId: lastUrl ? extractConversationIdFromUrl(lastUrl) : undefined,
+            activeModelLabel,
             controllerPid: process.pid,
           };
           throw new BrowserAutomationError(
@@ -1721,6 +1755,7 @@ async function runRemoteBrowserMode(
       userDataDir: undefined,
       chromeTargetId: remoteTargetId ?? undefined,
       tabUrl: lastUrl,
+      activeModelLabel,
       controllerPid: process.pid,
     };
   } catch (error) {
@@ -1744,6 +1779,7 @@ async function runRemoteBrowserMode(
         chromePort: port,
         chromeTargetId: remoteTargetId ?? undefined,
         tabUrl: lastUrl,
+        activeModelLabel,
         controllerPid: process.pid,
       },
     });
