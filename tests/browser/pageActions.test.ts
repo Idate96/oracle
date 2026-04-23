@@ -13,6 +13,7 @@ import {
 } from "../../src/browser/pageActions.js";
 import * as attachments from "../../src/browser/actions/attachments.js";
 import * as attachmentDataTransfer from "../../src/browser/actions/attachmentDataTransfer.js";
+import { buildLoginProbeExpressionForTest } from "../../src/browser/actions/navigation.js";
 import type { ChromeClient } from "../../src/browser/types.js";
 import { BrowserAutomationError } from "../../src/oracle/errors.js";
 
@@ -204,6 +205,11 @@ describe("ensureLoggedIn", () => {
     } as unknown as ChromeClient["Runtime"];
     await expect(ensureLoggedIn(runtime, logger, { appliedCookies: 2 })).resolves.toBeUndefined();
     expect(logger).toHaveBeenCalledWith(expect.stringContaining("Login check passed"));
+  });
+
+  test("login probe does not treat about:blank as a valid session", () => {
+    const expression = buildLoginProbeExpressionForTest(5000);
+    expect(expression).toContain("onChatGptPage && !loginSignals");
   });
 
   test("throws with cookie guidance when cookies missing", async () => {

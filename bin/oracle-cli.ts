@@ -138,6 +138,7 @@ interface CliOptions extends OptionValues {
   browserHeadless?: boolean;
   browserHideWindow?: boolean;
   browserKeepBrowser?: boolean;
+  browserModelLabel?: string;
   browserModelStrategy?: "select" | "current" | "ignore";
   browserManualLogin?: boolean;
   browserManualLoginProfileDir?: string;
@@ -577,6 +578,12 @@ program
   )
   .addOption(
     new Option("--browser-keep-browser", "Keep Chrome running after completion.").hideHelp(),
+  )
+  .addOption(
+    new Option(
+      "--browser-model-label <label>",
+      'Exact ChatGPT model picker label to select in browser mode, e.g. "GPT-5.5 Pro".',
+    ),
   )
   .addOption(
     new Option(
@@ -1635,7 +1642,9 @@ async function runRootCommand(options: CliOptions): Promise<void> {
 
   const sessionMode: SessionMode = engine === "browser" ? "browser" : "api";
   const browserModelLabelOverride =
-    sessionMode === "browser" ? resolveBrowserModelLabel(cliModelArg, resolvedModel) : undefined;
+    sessionMode === "browser"
+      ? resolveBrowserModelLabel(options.browserModelLabel ?? cliModelArg, resolvedModel)
+      : undefined;
   const browserConfig =
     sessionMode === "browser"
       ? await buildBrowserConfig({

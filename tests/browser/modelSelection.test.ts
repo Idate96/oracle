@@ -9,6 +9,15 @@ const expectContains = (arr: string[], value: string) => {
 };
 
 describe("browser model selection matchers", () => {
+  it("includes pro + 5.5 tokens for GPT-5.5 Pro", () => {
+    const { labelTokens, testIdTokens } = buildModelMatchersLiteralForTest("GPT-5.5 Pro");
+    expect(labelTokens.some((t) => t.includes("pro"))).toBe(true);
+    expect(labelTokens.some((t) => t.includes("5.5") || t.includes("5-5"))).toBe(true);
+    expect(testIdTokens.some((t) => t.includes("gpt-5.5-pro") || t.includes("gpt-5-5-pro"))).toBe(
+      true,
+    );
+  });
+
   it("includes pro + 5.4 tokens for gpt-5.4-pro", () => {
     const { labelTokens, testIdTokens } = buildModelMatchersLiteralForTest("gpt-5.4-pro");
     expect(labelTokens.some((t) => t.includes("pro"))).toBe(true);
@@ -69,5 +78,12 @@ describe("browser model selection matchers", () => {
     expect(expression).toContain("const closeMenu = () =>");
     expect(expression).toContain("key: 'Escape'");
     expect(expression).toContain("closeMenu();");
+  });
+
+  it("accepts a selected option when the top bar label remains generic", () => {
+    const expression = buildModelSelectionExpressionForTest("GPT-5.5 Pro");
+    expect(expression).toContain("switched-best-effort");
+    expect(expression).toContain("match.label || getButtonLabel()");
+    expect(expression).toContain("ChatGPT");
   });
 });

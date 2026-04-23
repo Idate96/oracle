@@ -71,12 +71,20 @@ describe("buildBrowserConfig", () => {
     });
   });
 
-  test("prefers explicit browser model label when provided", async () => {
+  test("prefers explicit browser model label when provided for non-GPT models", async () => {
     const config = await buildBrowserConfig({
       model: "gpt-5.2-pro",
       browserModelLabel: "Instant",
     });
-    expect(config.desiredModel).toBe("GPT-5.4 Pro");
+    expect(config.desiredModel).toBe("Instant");
+  });
+
+  test("prefers explicit browser model label when provided for GPT models", async () => {
+    const config = await buildBrowserConfig({
+      model: "gpt-5.4-pro",
+      browserModelLabel: "GPT-5.5 Pro",
+    });
+    expect(config.desiredModel).toBe("GPT-5.5 Pro");
   });
 
   test("falls back to canonical label when override matches base model", async () => {
@@ -106,7 +114,7 @@ describe("buildBrowserConfig", () => {
       model: "gpt-5.1",
       browserModelLabel: "  ChatGPT 5.1 Instant  ",
     });
-    expect(config.desiredModel).toBe("GPT-5.2");
+    expect(config.desiredModel).toBe("ChatGPT 5.1 Instant");
   });
 
   test("parses remoteChrome host targets", async () => {

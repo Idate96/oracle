@@ -198,7 +198,7 @@ export async function ensureLoggedIn(
   const probe = normalizeLoginProbe(outcome.result?.value);
   if (probe.ok) {
     logger(
-      `Login check passed (status=${probe.status}, domLoginCta=${Boolean(probe.domLoginCta)})`,
+      `Login check passed (status=${probe.status}, domLoginCta=${Boolean(probe.domLoginCta)}, url=${probe.pageUrl ?? "n/a"})`,
     );
     return;
   }
@@ -449,6 +449,8 @@ function buildLoginProbeExpression(timeoutMs: number): string {
     // Some UIs render without a session; use DOM + network for a robust answer.
     const timer = setTimeout(() => {}, ${timeoutMs});
     const pageUrl = typeof location === 'object' && location?.href ? location.href : null;
+    const pageHost = typeof location === 'object' && location?.hostname ? location.hostname : '';
+    const onChatGptPage = /(^|\\.)chatgpt\\.com$/i.test(pageHost);
     const onAuthPage =
       typeof location === 'object' &&
       typeof location.pathname === 'string' &&
@@ -517,16 +519,21 @@ function buildLoginProbeExpression(timeoutMs: number): string {
     const loginSignals = domLoginCta || onAuthPage;
     clearTimeout(timer);
     return {
-      ok: !loginSignals && (status === 0 || status === 200),
+      ok: onChatGptPage && !loginSignals && (status === 0 || status === 200),
       status,
       redirected: false,
       url: pageUrl,
       pageUrl,
       domLoginCta,
       onAuthPage,
+      onChatGptPage,
       error,
     };
   })()`;
+}
+
+export function buildLoginProbeExpressionForTest(timeoutMs: number): string {
+  return buildLoginProbeExpression(timeoutMs);
 }
 
 function normalizeLoginProbe(raw: unknown): LoginProbeResult {

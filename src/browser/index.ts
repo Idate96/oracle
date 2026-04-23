@@ -225,9 +225,10 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
   let preserveBrowserOnError = false;
 
   try {
+    const baseUrl = CHATGPT_URL;
     try {
       const strictTabIsolation = Boolean(manualLogin && reusedChrome);
-      const connection = await connectWithNewTab(chrome.port, logger, undefined, chromeHost, {
+      const connection = await connectWithNewTab(chrome.port, logger, baseUrl, chromeHost, {
         fallbackToDefault: !strictTabIsolation,
         retries: strictTabIsolation ? 3 : 0,
         retryDelayMs: 500,
@@ -332,7 +333,6 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       );
     }
 
-    const baseUrl = CHATGPT_URL;
     // First load the base ChatGPT homepage to satisfy potential interstitials,
     // then hop to the requested URL if it differs.
     await raceWithDisconnect(navigateToChatGPT(Page, Runtime, baseUrl, logger));

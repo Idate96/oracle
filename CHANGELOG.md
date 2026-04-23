@@ -5,6 +5,7 @@
 ### Changed
 
 - Browser: persist the live ChatGPT model label in session runtime metadata, show it in `oracle session`, and include it in browser finish-line details so manual-login runs can confirm the actual UI model without asking the model to self-report.
+- Browser: expose `--browser-model-label` for exact ChatGPT picker labels and honor it for GPT browser runs, allowing workflows such as `--browser-model-label "GPT-5.5 Pro" --browser-thinking-time extended`.
 
 ## 0.9.0 — 2026-03-08
 

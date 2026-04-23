@@ -124,4 +124,20 @@ describe("connectWithNewTab", () => {
     expect(cdpNewMock).toHaveBeenCalledTimes(1);
     expect(cdpMock).toHaveBeenCalledWith({ host: "127.0.0.1", port: 9222, target: "target-2" });
   });
+
+  test("opens isolated target at requested initial URL", async () => {
+    cdpNewMock.mockResolvedValue({ id: "target-3" });
+    cdpMock.mockResolvedValue({});
+
+    const { connectWithNewTab } = await import("../../src/browser/chromeLifecycle.js");
+    const logger = vi.fn();
+
+    await connectWithNewTab(9222, logger, "https://chatgpt.com/");
+
+    expect(cdpNewMock).toHaveBeenCalledWith({
+      host: "127.0.0.1",
+      port: 9222,
+      url: "https://chatgpt.com/",
+    });
+  });
 });
