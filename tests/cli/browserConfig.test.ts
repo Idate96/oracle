@@ -3,7 +3,7 @@ import { buildBrowserConfig, resolveBrowserModelLabel } from "../../src/cli/brow
 
 describe("buildBrowserConfig", () => {
   test("uses defaults when optional flags omitted", async () => {
-    const config = await buildBrowserConfig({ model: "gpt-5.4-pro" });
+    const config = await buildBrowserConfig({ model: "gpt-5.5-pro" });
     expect(config).toMatchObject({
       chromeProfile: "Default",
       chromePath: null,
@@ -15,7 +15,7 @@ describe("buildBrowserConfig", () => {
       headless: undefined,
       keepBrowser: undefined,
       hideWindow: undefined,
-      desiredModel: "GPT-5.4 Pro",
+      desiredModel: "GPT-5.5 Pro",
       debug: undefined,
       allowCookieErrors: true,
     });
@@ -208,11 +208,12 @@ describe("buildBrowserConfig", () => {
 
 describe("resolveBrowserModelLabel", () => {
   test("returns canonical ChatGPT label when CLI value matches API model", () => {
-    expect(resolveBrowserModelLabel("gpt-5.4-pro", "gpt-5.4-pro")).toBe("GPT-5.4 Pro");
+    expect(resolveBrowserModelLabel("gpt-5.5-pro", "gpt-5.5-pro")).toBe("GPT-5.5 Pro");
+    expect(resolveBrowserModelLabel("gpt-5.4-pro", "gpt-5.4-pro")).toBe("GPT-5.5 Pro");
     expect(resolveBrowserModelLabel("gpt-5.4", "gpt-5.4")).toBe("Thinking 5.4");
-    expect(resolveBrowserModelLabel("gpt-5-pro", "gpt-5-pro")).toBe("GPT-5.4 Pro");
-    expect(resolveBrowserModelLabel("gpt-5.2-pro", "gpt-5.2-pro")).toBe("GPT-5.4 Pro");
-    expect(resolveBrowserModelLabel("gpt-5.1-pro", "gpt-5.1-pro")).toBe("GPT-5.4 Pro");
+    expect(resolveBrowserModelLabel("gpt-5-pro", "gpt-5-pro")).toBe("GPT-5.5 Pro");
+    expect(resolveBrowserModelLabel("gpt-5.2-pro", "gpt-5.2-pro")).toBe("GPT-5.5 Pro");
+    expect(resolveBrowserModelLabel("gpt-5.1-pro", "gpt-5.1-pro")).toBe("GPT-5.5 Pro");
     expect(resolveBrowserModelLabel("GPT-5.1", "gpt-5.1")).toBe("GPT-5.2");
   });
 
@@ -225,7 +226,7 @@ describe("resolveBrowserModelLabel", () => {
   });
 
   test("supports undefined or whitespace-only input", () => {
-    expect(resolveBrowserModelLabel(undefined, "gpt-5.2-pro")).toBe("GPT-5.4 Pro");
+    expect(resolveBrowserModelLabel(undefined, "gpt-5.2-pro")).toBe("GPT-5.5 Pro");
     expect(resolveBrowserModelLabel("   ", "gpt-5.1")).toBe("GPT-5.2");
   });
 

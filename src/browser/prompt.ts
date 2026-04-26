@@ -13,6 +13,7 @@ import { isKnownModel } from "../oracle/modelResolver.js";
 import { buildPromptMarkdown } from "../oracle/promptAssembly.js";
 import type { BrowserAttachment } from "./types.js";
 import { buildAttachmentPlan } from "./policies.js";
+import { writeZipBundle } from "./zipBundle.js";
 
 const DEFAULT_BROWSER_INLINE_CHAR_BUDGET = 60_000;
 
@@ -39,6 +40,10 @@ const MEDIA_EXTENSIONS = new Set([
   ".heic",
   ".heif",
   ".pdf",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".tgz",
 ]);
 
 export function isMediaFile(filePath: string): boolean {
@@ -136,26 +141,20 @@ export async function assembleBrowserPrompt(
   const attachments: BrowserAttachment[] = [...selectedPlan.attachments, ...mediaAttachments];
 
   const shouldBundle = selectedPlan.shouldBundle;
-  let bundleText: string | null = null;
   let bundled: { originalCount: number; bundlePath: string } | null = null;
   if (shouldBundle) {
     const bundleDir = await fs.mkdtemp(path.join(os.tmpdir(), "oracle-browser-bundle-"));
-    const bundlePath = path.join(bundleDir, "attachments-bundle.txt");
-    const bundleLines: string[] = [];
-    sections.forEach((section) => {
-      bundleLines.push(formatFileSection(section.displayPath, section.content).trimEnd());
-      bundleLines.push("");
-    });
-    bundleText = `${bundleLines
-      .join("\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trimEnd()}\n`;
-    await fs.writeFile(bundlePath, bundleText, "utf8");
+    const bundlePath = path.join(bundleDir, "attachments-bundle.zip");
+    await writeZipBundle(
+      sections.map((section) => ({ path: section.displayPath, content: section.content })),
+      bundlePath,
+    );
+    const bundleStats = await fs.stat(bundlePath);
     attachments.length = 0;
     attachments.push({
       path: bundlePath,
       displayPath: bundlePath,
-      sizeBytes: Buffer.byteLength(bundleText, "utf8"),
+      sizeBytes: bundleStats.size,
     });
     attachments.push(...mediaAttachments);
     bundled = { originalCount: sections.length, bundlePath };
@@ -183,11 +182,9 @@ export async function assembleBrowserPrompt(
   );
   const tokenEstimateIncludesInlineFiles = inlineFileCount > 0 && Boolean(selectedPlan.inlineBlock);
   if (!tokenEstimateIncludesInlineFiles && sections.length > 0) {
-    const attachmentText =
-      bundleText ??
-      sections
-        .map((section) => formatFileSection(section.displayPath, section.content).trimEnd())
-        .join("\n\n");
+    const attachmentText = sections
+      .map((section) => formatFileSection(section.displayPath, section.content).trimEnd())
+      .join("\n\n");
     const attachmentTokens = tokenizer(
       [{ role: "user", content: attachmentText }],
       TOKENIZER_OPTIONS,
@@ -202,22 +199,17 @@ export async function assembleBrowserPrompt(
     let fallbackBundled: { originalCount: number; bundlePath: string } | null = null;
     if (uploadPlan.shouldBundle) {
       const bundleDir = await fs.mkdtemp(path.join(os.tmpdir(), "oracle-browser-bundle-"));
-      const bundlePath = path.join(bundleDir, "attachments-bundle.txt");
-      const bundleLines: string[] = [];
-      sections.forEach((section) => {
-        bundleLines.push(formatFileSection(section.displayPath, section.content).trimEnd());
-        bundleLines.push("");
-      });
-      const fallbackBundleText = `${bundleLines
-        .join("\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .trimEnd()}\n`;
-      await fs.writeFile(bundlePath, fallbackBundleText, "utf8");
+      const bundlePath = path.join(bundleDir, "attachments-bundle.zip");
+      await writeZipBundle(
+        sections.map((section) => ({ path: section.displayPath, content: section.content })),
+        bundlePath,
+      );
+      const bundleStats = await fs.stat(bundlePath);
       fallbackAttachments.length = 0;
       fallbackAttachments.push({
         path: bundlePath,
         displayPath: bundlePath,
-        sizeBytes: Buffer.byteLength(fallbackBundleText, "utf8"),
+        sizeBytes: bundleStats.size,
       });
       fallbackAttachments.push(...mediaAttachments);
       fallbackBundled = { originalCount: sections.length, bundlePath };

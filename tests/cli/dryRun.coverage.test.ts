@@ -25,19 +25,25 @@ describe("runDryRunSummary", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("No files matched"));
   });
 
-  test("browser dry run with bundled attachments logs bundle info and cookie source", async () => {
+  test("browser dry run with zipped attachments logs bundle info and cookie source", async () => {
     const log = vi.fn();
     const assembleBrowserPromptImpl = vi.fn().mockResolvedValue({
       markdown: "[SYSTEM]\n[USER]",
       composerText: "Do it",
       estimatedInputTokens: 1234,
-      attachments: [{ path: "/tmp/bundle.txt", displayPath: "/tmp/bundle.txt", sizeBytes: 42 }],
+      attachments: [
+        {
+          path: "/tmp/attachments-bundle.zip",
+          displayPath: "/tmp/attachments-bundle.zip",
+          sizeBytes: 42,
+        },
+      ],
       inlineFileCount: 0,
       tokenEstimateIncludesInlineFiles: false,
       attachmentsPolicy: "auto",
       attachmentMode: "bundle",
       fallback: null,
-      bundled: { originalCount: 3, bundlePath: "/tmp/bundle.txt" },
+      bundled: { originalCount: 3, bundlePath: "/tmp/attachments-bundle.zip" },
     });
 
     await runDryRunSummary(

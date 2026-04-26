@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { assembleBrowserPrompt } from "../../src/browser/prompt.js";
 import { DEFAULT_SYSTEM_PROMPT, type MODEL_CONFIGS } from "../../src/oracle.js";
@@ -193,7 +194,7 @@ describe("assembleBrowserPrompt", () => {
     expect(inline.tokenEstimateIncludesInlineFiles).toBe(true);
   });
 
-  test("bundles attachments when more than 10 files", async () => {
+  test("zips attachments when more than 10 files", async () => {
     const fileNames = Array.from({ length: 11 }, (_, i) => `file${i + 1}.txt`);
     const options = buildOptions({ file: fileNames, browserAttachments: "always" });
     const result = await assembleBrowserPrompt(options, {
@@ -206,11 +207,16 @@ describe("assembleBrowserPrompt", () => {
     });
 
     expect(result.attachments).toHaveLength(1);
-    expect(result.attachments[0]?.displayPath).toMatch(/attachments-bundle\.txt$/);
+    expect(result.attachments[0]?.displayPath).toMatch(/attachments-bundle\.zip$/);
     expect(result.inlineFileCount).toBe(0);
     expect(result.bundled).toEqual({
       originalCount: 11,
       bundlePath: result.attachments[0]?.displayPath,
     });
+
+    const archive = await fs.readFile(result.attachments[0]?.path ?? "");
+    expect(archive.subarray(0, 4).toString("latin1")).toBe("PK\u0003\u0004");
+    expect(archive.toString("utf8")).toContain("file1.txt");
+    expect(archive.toString("utf8")).toContain("content for file1.txt");
   });
 });
