@@ -52,7 +52,7 @@ export function resolveRunOptionsFromConfig({
     resolvedEngine === "browser" && normalizedRequestedModels.length === 0
       ? inferModelFromLabel(cliModelArg)
       : resolveApiModel(cliModelArg);
-  // Browser engine maps Pro/legacy aliases to the latest ChatGPT picker target (GPT-5.5 Pro).
+  // Browser engine maps Pro/legacy aliases to the current ChatGPT Pro picker target.
   const resolvedModel =
     resolvedEngine === "browser" ? normalizeChatGptModelForBrowser(inferredModel) : inferredModel;
   const isCodex = resolvedModel.startsWith("gpt-5.1-codex");

@@ -30,6 +30,10 @@ describe("runBrowserSessionExecution", () => {
         tookMs: 1000,
         answerTokens: 12,
         answerChars: 20,
+        chromePort: 9999,
+        chromeHost: "127.0.0.1",
+        chromeTargetId: "t-1",
+        tabUrl: "https://chatgpt.com/c/foo",
         activeModelLabel: "GPT-5.5 Pro",
       };
     });
@@ -72,6 +76,9 @@ describe("runBrowserSessionExecution", () => {
       }),
     );
     expect(result.runtime.activeModelLabel).toBe("GPT-5.5 Pro");
+    expect(result.runtime.chromeTargetId).toBe("t-1");
+    expect(result.runtime.tabUrl).toBe("https://chatgpt.com/c/foo");
+    expect(result.runtime.conversationId).toBe("foo");
     expect(log).toHaveBeenCalled();
   });
 

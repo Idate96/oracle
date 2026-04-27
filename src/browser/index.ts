@@ -235,6 +235,8 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       });
       client = connection.client;
       isolatedTargetId = connection.targetId ?? null;
+      lastTargetId = isolatedTargetId ?? lastTargetId;
+      await emitRuntimeHint();
     } catch (error) {
       const hint = describeDevtoolsFirewallHint(chromeHost, chrome.port);
       if (hint) {
@@ -518,7 +520,6 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       const baselineAssistantText =
         typeof baselineSnapshot?.text === "string" ? baselineSnapshot.text.trim() : "";
       const attachmentNames = submissionAttachments.map((a) => path.basename(a.path));
-      let attachmentWaitTimedOut = false;
       let inputOnlyAttachments = false;
       if (submissionAttachments.length > 0) {
         if (!DOM) {
@@ -543,6 +544,11 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           }
           await delay(500);
         }
+        if (inputOnlyAttachments) {
+          logger(
+            "[browser] One or more attachments only reached the file input; requiring visible composer verification before send.",
+          );
+        }
         // Scale timeout based on number of files: base 45s + 20s per additional file.
         const baseTimeout = config.inputTimeoutMs ?? 30_000;
         const perFileTimeout = 20_000;
@@ -553,19 +559,14 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           logger("All attachments uploaded");
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          if (/Attachments did not finish uploading before timeout/i.test(message)) {
-            attachmentWaitTimedOut = true;
-            logger(
-              `[browser] Attachment upload timed out after ${Math.round(waitBudget / 1000)}s; continuing without confirmation.`,
-            );
-          } else {
-            throw error;
-          }
+          throw new Error(
+            `Attachment upload failed before prompt submission: ${message}. ` +
+              "Oracle will not send a browser request without verified attachments.",
+          );
         }
       }
       let baselineTurns = await readConversationTurnCount(Runtime, logger);
       // Learned: return baselineTurns so assistant polling can ignore earlier content.
-      const sendAttachmentNames = attachmentWaitTimedOut ? [] : attachmentNames;
       const providerState: Record<string, unknown> = {
         runtime: Runtime,
         input: Input,
@@ -573,7 +574,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         timeoutMs: config.timeoutMs,
         inputTimeoutMs: config.inputTimeoutMs ?? undefined,
         baselineTurns: baselineTurns ?? undefined,
-        attachmentNames: sendAttachmentNames,
+        attachmentNames,
       };
       await runProviderSubmissionFlow(chatgptDomProvider, {
         prompt,
@@ -587,24 +588,11 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         baselineTurns = providerBaselineTurns;
       }
       if (attachmentNames.length > 0) {
-        if (attachmentWaitTimedOut) {
-          logger("Attachment confirmation timed out; skipping user-turn attachment verification.");
-        } else if (inputOnlyAttachments) {
-          logger(
-            "Attachment UI did not render before send; skipping user-turn attachment verification.",
-          );
-        } else {
-          const verified = await waitForUserTurnAttachments(
-            Runtime,
-            attachmentNames,
-            20_000,
-            logger,
-          );
-          if (!verified) {
-            throw new Error("Sent user message did not expose attachment UI after upload.");
-          }
-          logger("Verified attachments present on sent user message");
+        const verified = await waitForUserTurnAttachments(Runtime, attachmentNames, 20_000, logger);
+        if (!verified) {
+          throw new Error("Sent user message did not expose attachment UI after upload.");
         }
+        logger("Verified attachments present on sent user message");
       }
       // Reattach needs a /c/ URL; ChatGPT can update it late, so poll in the background.
       scheduleConversationHint("post-submit", config.timeoutMs ?? 120_000);
@@ -951,6 +939,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       userDataDir,
       chromeTargetId: lastTargetId,
       tabUrl: lastUrl,
+      conversationId: lastUrl ? extractConversationIdFromUrl(lastUrl) : undefined,
       activeModelLabel,
       controllerPid: process.pid,
     };
@@ -1755,6 +1744,7 @@ async function runRemoteBrowserMode(
       userDataDir: undefined,
       chromeTargetId: remoteTargetId ?? undefined,
       tabUrl: lastUrl,
+      conversationId: lastUrl ? extractConversationIdFromUrl(lastUrl) : undefined,
       activeModelLabel,
       controllerPid: process.pid,
     };

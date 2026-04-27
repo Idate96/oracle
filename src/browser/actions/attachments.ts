@@ -1065,34 +1065,17 @@ export async function uploadAttachmentFile(
         return { evaluation, signalState, immediateInputMatch };
       };
 
-      const dispatchInputEvents = async () => {
-        await runtime
-          .evaluate({
-            expression: `(() => {
-              const input = document.querySelector('input[type="file"][data-oracle-upload-idx="${idx}"]');
-              if (!(input instanceof HTMLInputElement)) return false;
-              try {
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-                return true;
-              } catch {
-                return false;
-              }
-            })()`,
-            returnByValue: true,
-          })
-          .catch(() => undefined);
-      };
-
       let result = await runInputAttempt("set");
       if (result.evaluation.status === "ui") {
         confirmedAttachment = true;
         break;
       }
       if (result.evaluation.status === "input") {
-        await dispatchInputEvents();
-        await delay(150);
-        const forcedState = await gatherSignals(1_500);
+        logger(
+          "Attachment input accepted the file; waiting for ChatGPT to render the attachment UI.",
+        );
+        await delay(250);
+        const forcedState = await gatherSignals(3_000);
         const forcedEvaluation = await evaluateSignals(
           forcedState.signalResult,
           forcedState.postInputSignals,
@@ -1103,11 +1086,13 @@ export async function uploadAttachmentFile(
           break;
         }
         if (forcedEvaluation.status === "input") {
-          logger("Attachment input set; proceeding without UI confirmation.");
+          logger(
+            "Attachment input set but no attachment UI appeared yet; retrying with data transfer.",
+          );
           inputConfirmed = true;
-          break;
+        } else {
+          logger("Attachment input set without UI confirmation; retrying with data transfer.");
         }
-        logger("Attachment input set; retrying with data transfer to trigger ChatGPT upload.");
         await dom
           .setFileInputFiles({ nodeId: resultNode.nodeId, files: [] })
           .catch(() => undefined);
@@ -1118,7 +1103,7 @@ export async function uploadAttachmentFile(
           break;
         }
         if (result.evaluation.status === "input") {
-          logger("Attachment input set; proceeding without UI confirmation.");
+          logger("Attachment input set but no attachment UI appeared yet.");
           inputConfirmed = true;
           break;
         }
@@ -1136,7 +1121,7 @@ export async function uploadAttachmentFile(
         break;
       }
       if (lateSignals.input || hasInputDelta(lateSignals)) {
-        logger("Attachment input set; proceeding without UI confirmation.");
+        logger("Attachment input set but no attachment UI appeared yet.");
         inputConfirmed = true;
         break;
       }
@@ -1148,7 +1133,7 @@ export async function uploadAttachmentFile(
         break;
       }
       if (result.evaluation.status === "input") {
-        logger("Attachment input set; proceeding without UI confirmation.");
+        logger("Attachment input set but no attachment UI appeared yet.");
         inputConfirmed = true;
         break;
       }
@@ -1190,9 +1175,9 @@ export async function uploadAttachmentFile(
 
   if (inputConfirmed || inputHasFile) {
     logger(
-      "Attachment input accepted the file but UI did not acknowledge it; continuing with input confirmation only.",
+      "Attachment input accepted the file but UI did not acknowledge it; requiring pre-send attachment verification.",
     );
-    return true;
+    return false;
   }
 
   await logDomFailure(runtime, logger, "file-upload-missing");

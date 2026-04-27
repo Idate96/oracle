@@ -201,6 +201,14 @@ export async function submitPrompt(
     );
   }
 
+  await waitForComposerReadyBeforeSend(
+    runtime,
+    prompt,
+    deps?.attachmentNames ?? [],
+    logger,
+    deps.inputTimeoutMs ?? undefined,
+  );
+
   const clicked = await attemptSendButton(runtime, logger, deps?.attachmentNames);
   if (!clicked) {
     await input.dispatchKeyEvent({
@@ -315,34 +323,179 @@ function buildAttachmentReadyExpression(attachmentNames: string[]): string {
       document.querySelector('form') ||
       document.body ||
       document;
-    const match = (node, name) => (node?.textContent || '').toLowerCase().includes(name);
+    const normalize = (value) => String(value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+    const normalizeName = (value) => {
+      const base = normalize(value).split('/').pop()?.split('\\\\').pop() || normalize(value);
+      return base;
+    };
+    const expected = names.map(normalizeName).filter(Boolean);
+    const matchesExpected = (value, expectedName) => {
+      const text = normalize(value);
+      if (!text) return false;
+      const noExt = expectedName.replace(/\\.[a-z0-9]{1,10}$/i, '');
+      if (text.includes(expectedName)) return true;
+      if (noExt.length >= 6 && text.includes(noExt)) return true;
+      if (text.includes('…') || text.includes('...')) {
+        const marker = text.includes('…') ? '…' : '...';
+        const [prefixRaw, suffixRaw] = text.split(marker);
+        const prefix = normalize(prefixRaw);
+        const suffix = normalize(suffixRaw);
+        const target = noExt.length >= 6 ? noExt : expectedName;
+        return (!prefix || target.includes(prefix)) && (!suffix || target.includes(suffix));
+      }
+      return false;
+    };
 
     // Restrict to attachment affordances; never scan generic div/span nodes (prompt text can contain the file name).
     const attachmentSelectors = [
       '[data-testid*="chip"]',
       '[data-testid*="attachment"]',
       '[data-testid*="upload"]',
+      '[data-testid*="file"]',
       '[aria-label="Remove file"]',
       'button[aria-label="Remove file"]',
+      '[aria-label*="Remove"]',
+      '[aria-label*="remove"]',
     ];
-
-    const chipsReady = names.every((name) =>
-      Array.from(composer.querySelectorAll(attachmentSelectors.join(','))).some((node) => match(node, name)),
+    const roots = Array.from(new Set([composer, document.querySelector('form'), document.body, document].filter(Boolean)));
+    const attachmentNodes = roots.flatMap((root) =>
+      Array.from(root.querySelectorAll(attachmentSelectors.join(','))),
+    ).filter((node, index, nodes) => !(node instanceof HTMLInputElement) && nodes.indexOf(node) === index);
+    const valuesFor = (node) => [
+      node?.textContent || '',
+      node?.getAttribute?.('aria-label') || '',
+      node?.getAttribute?.('title') || '',
+      node?.getAttribute?.('data-testid') || '',
+      node?.parentElement?.textContent || '',
+      node?.parentElement?.getAttribute?.('aria-label') || '',
+      node?.parentElement?.getAttribute?.('title') || '',
+      node?.parentElement?.parentElement?.textContent || '',
+    ];
+    const namedUiReady = expected.every((name) =>
+      attachmentNodes.some((node) => valuesFor(node).some((value) => matchesExpected(value, name))),
     );
-    const inputsReady = names.every((name) =>
-      Array.from(composer.querySelectorAll('input[type="file"]')).some((el) =>
-        Array.from((el instanceof HTMLInputElement ? el.files : []) || []).some((file) =>
-          file?.name?.toLowerCase?.().includes(name),
-        ),
-      ),
-    );
 
-    return chipsReady || inputsReady;
+    const countRegex = /(?:^|\\b)(\\d+)\\s+(?:files?|attachments?)\\b/;
+    let fileCount = 0;
+    for (const node of attachmentNodes) {
+      for (const value of valuesFor(node)) {
+        const normalized = normalize(value);
+        if (!normalized.includes('file') && !normalized.includes('attachment')) continue;
+        const match = normalized.match(countRegex);
+        if (match) {
+          const parsed = Number(match[1]);
+          if (Number.isFinite(parsed)) fileCount = Math.max(fileCount, parsed);
+        }
+      }
+    }
+    const countUiReady = expected.length > 0 && attachmentNodes.length > 0 && fileCount >= expected.length;
+
+    return namedUiReady || countUiReady;
   })()`;
 }
 
 export function buildAttachmentReadyExpressionForTest(attachmentNames: string[]) {
   return buildAttachmentReadyExpression(attachmentNames);
+}
+
+async function waitForComposerReadyBeforeSend(
+  Runtime: ChromeClient["Runtime"],
+  prompt: string,
+  attachmentNames: string[],
+  logger: BrowserLogger,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const encodedPrompt = JSON.stringify(prompt.trim());
+  const inputSelectorsLiteral = JSON.stringify(INPUT_SELECTORS);
+  const sendSelectorsLiteral = JSON.stringify(SEND_BUTTON_SELECTORS);
+  const attachmentExpression = buildAttachmentReadyExpression(attachmentNames);
+  const deadline = Date.now() + Math.max(10_000, timeoutMs);
+  const checkExpression = `(() => {
+    const normalize = (value) => String(value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+    const expectedPrompt = normalize(${encodedPrompt});
+    const promptPrefix = expectedPrompt.slice(0, Math.min(180, expectedPrompt.length));
+    const inputSelectors = ${inputSelectorsLiteral};
+    const sendSelectors = ${sendSelectorsLiteral};
+    const readValue = (node) => {
+      if (!node) return '';
+      if (node instanceof HTMLTextAreaElement) return node.value || '';
+      return node.innerText || node.textContent || '';
+    };
+    const visible = (node) => {
+      if (!node || typeof node.getBoundingClientRect !== 'function') return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const promptNodes = inputSelectors
+      .map((selector) => document.querySelector(selector))
+      .filter(Boolean);
+    const activePromptNodes = promptNodes.filter(visible);
+    const promptText = normalize((activePromptNodes.length > 0 ? activePromptNodes : promptNodes)
+      .map(readValue)
+      .join('\\n'));
+    const promptReady =
+      expectedPrompt.length === 0 ||
+      promptText.includes(expectedPrompt) ||
+      (promptPrefix.length >= 30 && promptText.includes(promptPrefix));
+    let button = null;
+    for (const selector of sendSelectors) {
+      button = document.querySelector(selector);
+      if (button) break;
+    }
+    const sendReady = Boolean(button) &&
+      !button.hasAttribute('disabled') &&
+      button.getAttribute('aria-disabled') !== 'true' &&
+      button.getAttribute('data-disabled') !== 'true' &&
+      window.getComputedStyle(button).pointerEvents !== 'none' &&
+      window.getComputedStyle(button).display !== 'none';
+    const alertText = Array.from(document.querySelectorAll('[role="alert"],[aria-live="assertive"],[aria-live="polite"],[data-testid*="toast"],[data-testid*="error"]'))
+      .map((node) => node?.textContent || '')
+      .join('\\n');
+    const uploadErrorMatch = normalize(alertText).match(/(already uploaded|upload failed|failed to upload|couldn['’]?t upload|could not upload|file is too large|unsupported file)/);
+    return {
+      promptReady,
+      sendReady,
+      promptChars: promptText.length,
+      uploadError: Boolean(uploadErrorMatch),
+      uploadErrorText: uploadErrorMatch ? uploadErrorMatch[0] : '',
+    };
+  })()`;
+
+  type ComposerReadyState = {
+    promptReady?: boolean;
+    sendReady?: boolean;
+    promptChars?: number;
+    uploadError?: boolean;
+    uploadErrorText?: string;
+  };
+  let lastState: ComposerReadyState | null = null;
+  while (Date.now() < deadline) {
+    const [{ result: stateResult }, { result: attachmentResult }] = await Promise.all([
+      Runtime.evaluate({ expression: checkExpression, returnByValue: true }),
+      Runtime.evaluate({ expression: attachmentExpression, returnByValue: true }),
+    ]);
+    lastState = (stateResult?.value as ComposerReadyState | undefined) ?? null;
+    const attachmentsReady = attachmentNames.length === 0 ? true : Boolean(attachmentResult?.value);
+    if (lastState?.uploadError) {
+      throw new Error(
+        `Attachment upload error shown in ChatGPT composer: ${lastState.uploadErrorText || "unknown error"}`,
+      );
+    }
+    if (lastState?.promptReady && attachmentsReady && lastState?.sendReady) {
+      return;
+    }
+    await delay(150);
+  }
+  logger(
+    `Composer pre-send verification failed: ${JSON.stringify({
+      promptReady: lastState?.promptReady ?? false,
+      sendReady: lastState?.sendReady ?? false,
+      promptChars: lastState?.promptChars ?? 0,
+      attachmentCount: attachmentNames.length,
+    })}`,
+  );
+  await logDomFailure(Runtime, logger, "composer-pre-send");
+  throw new Error("Prompt and attachments were not both visible in the composer before send.");
 }
 
 async function attemptSendButton(

@@ -18,4 +18,11 @@ describe("browser model selection arbitrary labels", () => {
     const { labelTokens } = buildModelMatchersLiteralForTest("Thinking");
     expectSome(labelTokens, (t) => t.includes("thinking"));
   });
+
+  it("accepts Extended Pro as an exact picker label", () => {
+    const { labelTokens, testIdTokens } = buildModelMatchersLiteralForTest("Extended Pro");
+    expectSome(labelTokens, (t) => t.includes("extended"));
+    expectSome(labelTokens, (t) => t.includes("pro"));
+    expectSome(testIdTokens, (t) => t.includes("extended-pro"));
+  });
 });

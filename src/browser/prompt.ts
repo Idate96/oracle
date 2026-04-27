@@ -51,6 +51,23 @@ export function isMediaFile(filePath: string): boolean {
   return MEDIA_EXTENSIONS.has(ext);
 }
 
+async function createBrowserBundleDir(): Promise<string> {
+  const envDir = process.env.ORACLE_BROWSER_BUNDLE_DIR?.trim();
+  const shouldUseDownloads =
+    !envDir && process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
+  const preferredRoot = envDir
+    ? path.resolve(envDir)
+    : shouldUseDownloads
+      ? path.join(os.homedir(), "Downloads")
+      : os.tmpdir();
+  try {
+    await fs.mkdir(preferredRoot, { recursive: true });
+    return await fs.mkdtemp(path.join(preferredRoot, "oracle-browser-bundle-"));
+  } catch {
+    return await fs.mkdtemp(path.join(os.tmpdir(), "oracle-browser-bundle-"));
+  }
+}
+
 export interface BrowserPromptArtifacts {
   markdown: string;
   composerText: string;
@@ -143,7 +160,7 @@ export async function assembleBrowserPrompt(
   const shouldBundle = selectedPlan.shouldBundle;
   let bundled: { originalCount: number; bundlePath: string } | null = null;
   if (shouldBundle) {
-    const bundleDir = await fs.mkdtemp(path.join(os.tmpdir(), "oracle-browser-bundle-"));
+    const bundleDir = await createBrowserBundleDir();
     const bundlePath = path.join(bundleDir, "attachments-bundle.zip");
     await writeZipBundle(
       sections.map((section) => ({ path: section.displayPath, content: section.content })),
@@ -198,7 +215,7 @@ export async function assembleBrowserPrompt(
     const fallbackAttachments = [...uploadPlan.attachments, ...mediaAttachments];
     let fallbackBundled: { originalCount: number; bundlePath: string } | null = null;
     if (uploadPlan.shouldBundle) {
-      const bundleDir = await fs.mkdtemp(path.join(os.tmpdir(), "oracle-browser-bundle-"));
+      const bundleDir = await createBrowserBundleDir();
       const bundlePath = path.join(bundleDir, "attachments-bundle.zip");
       await writeZipBundle(
         sections.map((section) => ({ path: section.displayPath, content: section.content })),

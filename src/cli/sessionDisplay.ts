@@ -162,7 +162,7 @@ export async function attachSession(
   const statusAllowsReattach =
     metadata.status === "running" || (metadata.status === "error" && hasChromeDisconnect);
   const hasFallbackSessionInfo = Boolean(
-    runtime?.chromePort || runtime?.tabUrl || runtime?.conversationId,
+    runtime?.tabUrl || runtime?.conversationId || (runtime?.chromePort && runtime?.chromeTargetId),
   );
   const canReattach =
     statusAllowsReattach &&

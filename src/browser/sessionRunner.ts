@@ -9,6 +9,11 @@ import { assembleBrowserPrompt } from "./prompt.js";
 import { BrowserAutomationError } from "../oracle/errors.js";
 import type { BrowserLogger } from "./types.js";
 
+function extractConversationId(url?: string): string | undefined {
+  if (!url) return undefined;
+  return url.match(/\/c\/([a-zA-Z0-9-]+)/)?.[1];
+}
+
 export interface BrowserExecutionResult {
   usage: {
     inputTokens: number;
@@ -168,6 +173,9 @@ export async function runBrowserSessionExecution(
       chromePort: browserResult.chromePort,
       chromeHost: browserResult.chromeHost,
       userDataDir: browserResult.userDataDir,
+      chromeTargetId: browserResult.chromeTargetId,
+      tabUrl: browserResult.tabUrl,
+      conversationId: browserResult.conversationId ?? extractConversationId(browserResult.tabUrl),
       controllerPid: browserResult.controllerPid ?? process.pid,
       activeModelLabel: browserResult.activeModelLabel,
     },
