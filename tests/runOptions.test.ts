@@ -133,6 +133,39 @@ describe("resolveRunOptionsFromConfig", () => {
     expect(runOptions.effectiveModelId).toBe("gemini-3.1-pro-preview");
   });
 
+  it("uses ChatGPT browser composer mode for deep research when browser is auto-selected", () => {
+    const { runOptions, resolvedEngine, engineCoercedToApi } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      model: "deepresearch",
+      env: {},
+    });
+    expect(resolvedEngine).toBe("browser");
+    expect(engineCoercedToApi).toBe(false);
+    expect(runOptions.model).toBe(DEFAULT_MODEL);
+    expect(runOptions.browserComposerMode).toBe("deep-research");
+  });
+
+  it("uses API deep research aliases when API is selected", () => {
+    const { runOptions, resolvedEngine, engineCoercedToApi } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      model: "deepresearch",
+      env: { OPENAI_API_KEY: "sk-test" } as NodeJS.ProcessEnv,
+    });
+    expect(resolvedEngine).toBe("api");
+    expect(engineCoercedToApi).toBe(false);
+    expect(runOptions.model).toBe("o3-deep-research");
+    expect(runOptions.effectiveModelId).toBe("o3-deep-research");
+  });
+
+  it("maps mini deep research aliases to o4-mini-deep-research", () => {
+    const { runOptions } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      model: "mini deep research",
+      engine: "api",
+    });
+    expect(runOptions.model).toBe("o4-mini-deep-research");
+  });
+
   it("rejects browser engine explicitly set for gemini-3.1-pro", () => {
     expect(() =>
       resolveRunOptionsFromConfig({
@@ -141,6 +174,29 @@ describe("resolveRunOptionsFromConfig", () => {
         engine: "browser",
       }),
     ).toThrow("gemini-3.1-pro is API-only today");
+  });
+
+  it("accepts browser engine explicitly set for deep research", () => {
+    const { resolvedEngine, runOptions } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      model: "o3-deep-research",
+      engine: "browser",
+    });
+    expect(resolvedEngine).toBe("browser");
+    expect(runOptions.model).toBe(DEFAULT_MODEL);
+    expect(runOptions.browserComposerMode).toBe("deep-research");
+  });
+
+  it("enables browser deep research without changing the requested browser model", () => {
+    const { resolvedEngine, runOptions } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      model: "gpt-5.2",
+      engine: "browser",
+      browserDeepResearch: true,
+    });
+    expect(resolvedEngine).toBe("browser");
+    expect(runOptions.model).toBe("gpt-5.2");
+    expect(runOptions.browserComposerMode).toBe("deep-research");
   });
 
   it("accepts browser engine explicitly set for gemini", () => {
@@ -173,14 +229,14 @@ describe("resolveRunOptionsFromConfig", () => {
     expect(runOptions.model).toBe("gpt-5.2");
   });
 
-  it("maps browser engine Pro aliases to gpt-5.5-pro", () => {
-    const { resolvedEngine, runOptions } = resolveRunOptionsFromConfig({
-      prompt: basePrompt,
-      model: "gpt-5.1-pro",
-      engine: "browser",
-    });
-    expect(resolvedEngine).toBe("browser");
-    expect(runOptions.model).toBe("gpt-5.5-pro");
+  it("rejects browser engine legacy Pro aliases", () => {
+    expect(() =>
+      resolveRunOptionsFromConfig({
+        prompt: basePrompt,
+        model: "gpt-5.1-pro",
+        engine: "browser",
+      }),
+    ).toThrow("Unsupported ChatGPT browser Pro model");
   });
 
   it("forces api engine for gpt-5.1-codex when engine is auto-detected", () => {

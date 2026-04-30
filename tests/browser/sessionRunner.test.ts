@@ -5,7 +5,7 @@ import { runBrowserSessionExecution } from "../../src/browser/sessionRunner.js";
 
 const baseRunOptions: RunOracleOptions = {
   prompt: "Hello world",
-  model: "gpt-5.2-pro",
+  model: "gpt-5.5-pro",
   file: [],
   silent: false,
 };
@@ -80,6 +80,41 @@ describe("runBrowserSessionExecution", () => {
     expect(result.runtime.tabUrl).toBe("https://chatgpt.com/c/foo");
     expect(result.runtime.conversationId).toBe("foo");
     expect(log).toHaveBeenCalled();
+  });
+
+  test("rejects unverified Pro browser selection when the UI label stays generic", async () => {
+    const log = vi.fn();
+    await expect(
+      runBrowserSessionExecution(
+        {
+          runOptions: baseRunOptions,
+          browserConfig: { desiredModel: "Pro", modelStrategy: "select" },
+          cwd: "/repo",
+          log,
+        },
+        {
+          assemblePrompt: async () => ({
+            markdown: "prompt",
+            composerText: "prompt",
+            estimatedInputTokens: 42,
+            attachments: [],
+            inlineFileCount: 0,
+            tokenEstimateIncludesInlineFiles: false,
+            attachmentsPolicy: "auto",
+            attachmentMode: "inline",
+            fallback: null,
+          }),
+          executeBrowser: async () => ({
+            answerText: "text",
+            answerMarkdown: "markdown",
+            tookMs: 1,
+            answerTokens: 1,
+            answerChars: 4,
+            activeModelLabel: "ChatGPT",
+          }),
+        },
+      ),
+    ).rejects.toThrow(/model selection is unverified/i);
   });
 
   test("suppresses automation noise when not verbose", async () => {
@@ -205,6 +240,48 @@ describe("runBrowserSessionExecution", () => {
           prompt: "fallback prompt",
           attachments: [expect.objectContaining({ path: "/repo/a.txt", displayPath: "a.txt" })],
         },
+      }),
+    );
+  });
+
+  test("passes composer mode through to browser runner config", async () => {
+    const log = vi.fn();
+    const executeBrowser = vi.fn(async () => ({
+      answerText: "text",
+      answerMarkdown: "markdown",
+      tookMs: 1,
+      answerTokens: 1,
+      answerChars: 4,
+    }));
+    await runBrowserSessionExecution(
+      {
+        runOptions: {
+          ...baseRunOptions,
+          browserComposerMode: "deep-research",
+          verbose: false,
+        },
+        browserConfig: { composerMode: "deep-research" },
+        cwd: "/repo",
+        log,
+      },
+      {
+        assemblePrompt: async () => ({
+          markdown: "prompt",
+          composerText: "prompt",
+          estimatedInputTokens: 5,
+          attachments: [],
+          inlineFileCount: 0,
+          tokenEstimateIncludesInlineFiles: false,
+          attachmentsPolicy: "auto",
+          attachmentMode: "inline",
+          fallback: null,
+        }),
+        executeBrowser,
+      },
+    );
+    expect(executeBrowser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ composerMode: "deep-research" }),
       }),
     );
   });

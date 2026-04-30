@@ -37,6 +37,7 @@ export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
   manualLogin: false,
   manualLoginProfileDir: null,
   manualLoginCookieSync: false,
+  composerMode: null,
 };
 
 export function resolveBrowserConfig(
@@ -118,6 +119,7 @@ export function resolveBrowserConfig(
     manualLoginProfileDir: manualLogin ? resolvedProfileDir : null,
     manualLoginCookieSync:
       config?.manualLoginCookieSync ?? DEFAULT_BROWSER_CONFIG.manualLoginCookieSync,
+    composerMode: config?.composerMode ?? DEFAULT_BROWSER_CONFIG.composerMode,
   };
 }
 

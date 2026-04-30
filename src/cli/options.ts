@@ -195,6 +195,25 @@ function isGeminiDeepThinkAlias(normalized: string): boolean {
   );
 }
 
+function isDeepResearchAlias(normalized: string): boolean {
+  const compact = normalized.replace(/[\s_-]+/g, "");
+  const dashed = normalized.replace(/[\s_]+/g, "-");
+  return compact.includes("deepresearch") || dashed.includes("deep-research");
+}
+
+export function isDeepResearchModelAlias(value: string | undefined): boolean {
+  const normalized = normalizeModelOption(value).toLowerCase();
+  return normalized.length > 0 && isDeepResearchAlias(normalized);
+}
+
+function resolveDeepResearchAlias(normalized: string): ModelName {
+  const compact = normalized.replace(/[\s_-]+/g, "");
+  if (compact.includes("o4") || compact.includes("mini")) {
+    return "o4-mini-deep-research";
+  }
+  return "o3-deep-research";
+}
+
 export function resolveApiModel(modelValue: string): ModelName {
   const normalized = normalizeModelOption(modelValue).toLowerCase();
   if (normalized in MODEL_CONFIGS) {
@@ -220,6 +239,9 @@ export function resolveApiModel(modelValue: string): ModelName {
   }
   if (normalized.includes("5.4")) {
     return "gpt-5.4";
+  }
+  if (isDeepResearchAlias(normalized)) {
+    return resolveDeepResearchAlias(normalized);
   }
   if (normalized === "claude" || normalized === "sonnet" || /(^|\b)sonnet(\b|$)/.test(normalized)) {
     return "claude-4.5-sonnet";
@@ -287,6 +309,9 @@ export function inferModelFromLabel(modelValue: string): ModelName {
   }
   if (normalized.includes("codex")) {
     return "gpt-5.1-codex";
+  }
+  if (isDeepResearchAlias(normalized)) {
+    return resolveDeepResearchAlias(normalized);
   }
   if (isGeminiDeepThinkAlias(normalized)) {
     return "gemini-3-pro-deep-think" as ModelName;

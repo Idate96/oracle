@@ -9,6 +9,11 @@ const expectContains = (arr: string[], value: string) => {
 };
 
 describe("browser model selection matchers", () => {
+  it("maps bare Pro to the GPT-5.5 Pro picker option", () => {
+    const { testIdTokens } = buildModelMatchersLiteralForTest("Pro");
+    expect(testIdTokens).toContain("model-switcher-gpt-5-5-pro");
+  });
+
   it("includes pro + 5.5 tokens for GPT-5.5 Pro", () => {
     const { labelTokens, testIdTokens } = buildModelMatchersLiteralForTest("GPT-5.5 Pro");
     expect(labelTokens.some((t) => t.includes("pro"))).toBe(true);
@@ -75,6 +80,7 @@ describe("browser model selection matchers", () => {
 
   it("closes the menu after a successful selection path", () => {
     const expression = buildModelSelectionExpressionForTest("gpt-5.4");
+    expect(expression).toContain("button.__composer-pill");
     expect(expression).toContain("const closeMenu = () =>");
     expect(expression).toContain("key: 'Escape'");
     expect(expression).toContain("closeMenu();");

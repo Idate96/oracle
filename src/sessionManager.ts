@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import type { WriteStream } from "node:fs";
 import net from "node:net";
-import type { BrowserModelStrategy, CookieParam } from "./browser/types.js";
+import type { BrowserComposerMode, BrowserModelStrategy, CookieParam } from "./browser/types.js";
 import type {
   TransportFailureReason,
   AzureOptions,
@@ -57,6 +57,8 @@ export interface BrowserSessionConfig {
   manualLoginCookieSync?: boolean;
   /** Thinking time intensity: 'light', 'standard', 'extended', 'heavy' */
   thinkingTime?: ThinkingTimeLevel;
+  /** ChatGPT composer mode/tool to enable before submitting the prompt. */
+  composerMode?: BrowserComposerMode | null;
 }
 
 export interface BrowserRuntimeMetadata {
@@ -119,6 +121,7 @@ export interface StoredRunOptions {
   browserAttachments?: "auto" | "never" | "always";
   browserInlineFiles?: boolean;
   browserBundleFiles?: boolean;
+  browserComposerMode?: BrowserComposerMode | null;
   background?: boolean;
   search?: boolean;
   baseUrl?: string;

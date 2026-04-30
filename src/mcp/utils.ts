@@ -13,6 +13,7 @@ export function mapConsultToRunOptions({
   search,
   browserAttachments,
   browserBundleFiles,
+  browserDeepResearch,
   userConfig,
   env = process.env,
 }: {
@@ -24,6 +25,7 @@ export function mapConsultToRunOptions({
   search?: boolean;
   browserAttachments?: "auto" | "never" | "always";
   browserBundleFiles?: boolean;
+  browserDeepResearch?: boolean;
   userConfig?: UserConfig;
   env?: NodeJS.ProcessEnv;
 }): { runOptions: RunOracleOptions; resolvedEngine: EngineMode } {
@@ -38,9 +40,10 @@ export function mapConsultToRunOptions({
     files,
     model,
     models: mergedModels,
-    engine,
+    engine: browserDeepResearch ? "browser" : engine,
     userConfig,
     env,
+    browserDeepResearch,
   });
   if (typeof search === "boolean") {
     result.runOptions.search = search;
@@ -50,6 +53,9 @@ export function mapConsultToRunOptions({
   }
   if (typeof browserBundleFiles === "boolean") {
     result.runOptions.browserBundleFiles = browserBundleFiles;
+  }
+  if (browserDeepResearch) {
+    result.runOptions.browserComposerMode = "deep-research";
   }
   return result;
 }

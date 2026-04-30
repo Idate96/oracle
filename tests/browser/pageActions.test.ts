@@ -13,6 +13,7 @@ import {
 } from "../../src/browser/pageActions.js";
 import * as attachments from "../../src/browser/actions/attachments.js";
 import * as attachmentDataTransfer from "../../src/browser/actions/attachmentDataTransfer.js";
+import { isAssistantPlaceholderTextForTest } from "../../src/browser/actions/assistantResponse.js";
 import { buildLoginProbeExpressionForTest } from "../../src/browser/actions/navigation.js";
 import type { ChromeClient } from "../../src/browser/types.js";
 import { BrowserAutomationError } from "../../src/oracle/errors.js";
@@ -244,6 +245,13 @@ describe("ensureLoggedIn", () => {
 });
 
 describe("waitForAssistantResponse", () => {
+  test("treats bare Pro thinking as an unfinished placeholder", () => {
+    expect(isAssistantPlaceholderTextForTest("Pro thinking")).toBe(true);
+    expect(isAssistantPlaceholderTextForTest("ChatGPT said: Pro thinking")).toBe(true);
+    expect(isAssistantPlaceholderTextForTest("Pro thinking\n\nAnswer now")).toBe(true);
+    expect(isAssistantPlaceholderTextForTest("Final answer after thinking")).toBe(false);
+  });
+
   test("returns captured assistant payload", async () => {
     const runtime = {
       evaluate: vi.fn().mockResolvedValue({

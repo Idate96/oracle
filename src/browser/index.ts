@@ -60,6 +60,7 @@ import {
 } from "./profileState.js";
 import { runProviderSubmissionFlow } from "./providerDomFlow.js";
 import { chatgptDomProvider } from "./providers/index.js";
+import { captureDeepResearchReportIfAvailable } from "./deepResearchReport.js";
 
 export type { BrowserAutomationConfig, BrowserRunOptions, BrowserRunResult } from "./types.js";
 export { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from "./constants.js";
@@ -72,6 +73,26 @@ function isCloudflareChallengeError(error: unknown): error is BrowserAutomationE
 
 function shouldPreserveBrowserOnError(error: unknown, headless: boolean): boolean {
   return !headless && isCloudflareChallengeError(error);
+}
+
+function isGenericChatGptModelLabel(label: string | null | undefined): boolean {
+  const normalized = (label ?? "").trim().toLowerCase();
+  return ["chatgpt", "light", "standard", "extended", "heavy"].includes(normalized);
+}
+
+function resolveVerifiedModelLabel(
+  currentLabel: string | null | undefined,
+  selectedLabel: string | null | undefined,
+): string | undefined {
+  const current = currentLabel?.trim();
+  if (current && !isGenericChatGptModelLabel(current)) {
+    return current;
+  }
+  const selected = selectedLabel?.trim();
+  if (selected) {
+    return selected;
+  }
+  return current || undefined;
 }
 
 export function shouldPreserveBrowserOnErrorForTest(error: unknown, headless: boolean): boolean {
@@ -99,6 +120,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
   let lastTargetId: string | undefined;
   let lastUrl: string | undefined;
   let activeModelLabel: string | undefined;
+  let selectedModelLabel: string | undefined;
   const emitRuntimeHint = async (): Promise<void> => {
     if (!runtimeHintCb || !chrome?.port) {
       return;
@@ -441,15 +463,16 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     };
     const refreshActiveModelLabel = async (): Promise<void> => {
       const label = await readCurrentModelLabel(Runtime).catch(() => null);
-      if (label) {
-        activeModelLabel = label;
+      const effectiveLabel = resolveVerifiedModelLabel(label, selectedModelLabel);
+      if (effectiveLabel) {
+        activeModelLabel = effectiveLabel;
       }
       await emitRuntimeHint();
     };
     await captureRuntimeSnapshot();
     const modelStrategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY;
     if (config.desiredModel && modelStrategy !== "ignore") {
-      await raceWithDisconnect(
+      const selection = await raceWithDisconnect(
         withRetries(
           () => ensureModelSelection(Runtime, config.desiredModel as string, logger, modelStrategy),
           {
@@ -472,6 +495,9 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
             : "";
         throw new Error(`${base}${hint}`);
       });
+      if (modelStrategy === "select") {
+        selectedModelLabel = selection.label ?? config.desiredModel ?? selectedModelLabel;
+      }
       await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
       logger(
         `Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`,
@@ -575,6 +601,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         inputTimeoutMs: config.inputTimeoutMs ?? undefined,
         baselineTurns: baselineTurns ?? undefined,
         attachmentNames,
+        composerMode: config.composerMode ?? undefined,
       };
       await runProviderSubmissionFlow(chatgptDomProvider, {
         prompt,
@@ -791,6 +818,16 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     }
     answerText = answer.text;
     answerHtml = answer.html ?? "";
+    const sandboxReport = await captureDeepResearchReportIfAvailable({
+      chromeHost,
+      chromePort: chrome.port,
+      enabled: config.composerMode === "deep-research",
+      logger,
+    });
+    if (sandboxReport && sandboxReport.length > answerText.trim().length) {
+      answerText = sandboxReport;
+      answerHtml = "";
+    }
     const copiedMarkdown = await raceWithDisconnect(
       withRetries(
         async () => {
@@ -1284,6 +1321,7 @@ async function runRemoteBrowserMode(
   let remoteTargetId: string | null = null;
   let lastUrl: string | undefined;
   let activeModelLabel: string | undefined;
+  let selectedModelLabel: string | undefined;
   const runtimeHintCb = options.runtimeHintCb;
   const emitRuntimeHint = async () => {
     if (!runtimeHintCb) return;
@@ -1321,8 +1359,9 @@ async function runRemoteBrowserMode(
     const { Network, Page, Runtime, Input, DOM } = client;
     const refreshActiveModelLabel = async (): Promise<void> => {
       const label = await readCurrentModelLabel(Runtime).catch(() => null);
-      if (label) {
-        activeModelLabel = label;
+      const effectiveLabel = resolveVerifiedModelLabel(label, selectedModelLabel);
+      if (effectiveLabel) {
+        activeModelLabel = effectiveLabel;
       }
       await emitRuntimeHint();
     };
@@ -1359,7 +1398,7 @@ async function runRemoteBrowserMode(
 
     const modelStrategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY;
     if (config.desiredModel && modelStrategy !== "ignore") {
-      await withRetries(
+      const selection = await withRetries(
         () => ensureModelSelection(Runtime, config.desiredModel as string, logger, modelStrategy),
         {
           retries: 2,
@@ -1373,6 +1412,9 @@ async function runRemoteBrowserMode(
           },
         },
       );
+      if (modelStrategy === "select") {
+        selectedModelLabel = selection.label ?? config.desiredModel ?? selectedModelLabel;
+      }
       await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
       logger(
         `Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`,
@@ -1433,6 +1475,7 @@ async function runRemoteBrowserMode(
         inputTimeoutMs: config.inputTimeoutMs ?? undefined,
         baselineTurns: baselineTurns ?? undefined,
         attachmentNames,
+        composerMode: config.composerMode ?? undefined,
       };
       await runProviderSubmissionFlow(chatgptDomProvider, {
         prompt,
@@ -1632,6 +1675,16 @@ async function runRemoteBrowserMode(
     }
     answerText = answer.text;
     answerHtml = answer.html ?? "";
+    const sandboxReport = await captureDeepResearchReportIfAvailable({
+      chromeHost: host,
+      chromePort: port,
+      enabled: config.composerMode === "deep-research",
+      logger,
+    });
+    if (sandboxReport && sandboxReport.length > answerText.trim().length) {
+      answerText = sandboxReport;
+      answerHtml = "";
+    }
 
     const copiedMarkdown = await withRetries(
       async () => {

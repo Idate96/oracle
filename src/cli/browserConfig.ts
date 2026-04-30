@@ -11,9 +11,10 @@ import {
   parseDuration,
 } from "../browserMode.js";
 import { normalizeBrowserModelStrategy } from "../browser/modelStrategy.js";
-import type { BrowserModelStrategy } from "../browser/types.js";
+import type { BrowserComposerMode, BrowserModelStrategy } from "../browser/types.js";
 import type { CookieParam } from "../browser/types.js";
 import { getOracleHomeDir } from "../oracleHome.js";
+import { isDeepResearchModelAlias } from "./options.js";
 
 const DEFAULT_BROWSER_TIMEOUT_MS = 1_200_000;
 const DEFAULT_BROWSER_INPUT_TIMEOUT_MS = 60_000;
@@ -25,13 +26,9 @@ const DEFAULT_CHROME_PROFILE = "Default";
 // The browser label is passed to the model picker which fuzzy-matches against ChatGPT's UI.
 const BROWSER_MODEL_LABELS: [ModelName, string][] = [
   // Most specific first (e.g., "gpt-5.2-thinking" before "gpt-5.2")
-  ["gpt-5.5-pro", "Extended Pro"],
-  ["gpt-5.4-pro", "Extended Pro"],
+  ["gpt-5.5-pro", "Pro"],
   ["gpt-5.2-thinking", "GPT-5.2 Thinking"],
   ["gpt-5.2-instant", "GPT-5.2 Instant"],
-  ["gpt-5.2-pro", "Extended Pro"],
-  ["gpt-5.1-pro", "Extended Pro"],
-  ["gpt-5-pro", "Extended Pro"],
   // Base models last (least specific)
   ["gpt-5.4", "Thinking 5.4"],
   ["gpt-5.2", "GPT-5.2"], // Selects "Auto" in ChatGPT UI
@@ -67,6 +64,8 @@ export interface BrowserFlagOptions {
   browserManualLoginProfileDir?: string | null;
   /** Thinking time intensity: 'light', 'standard', 'extended', 'heavy' */
   browserThinkingTime?: ThinkingTimeLevel;
+  browserDeepResearch?: boolean;
+  browserComposerMode?: BrowserComposerMode | null;
   browserModelLabel?: string;
   browserModelStrategy?: BrowserModelStrategy;
   browserAllowCookieErrors?: boolean;
@@ -87,15 +86,8 @@ export function normalizeChatGptModelForBrowser(model: ModelName): ModelName {
     return normalized;
   }
 
-  // Pro variants: resolve to the latest Pro model in ChatGPT.
-  if (
-    normalized === "gpt-5.5-pro" ||
-    normalized === "gpt-5.4-pro" ||
-    normalized === "gpt-5-pro" ||
-    normalized === "gpt-5.1-pro" ||
-    normalized === "gpt-5.2-pro"
-  ) {
-    return "gpt-5.5-pro";
+  if (isUnsupportedBrowserProAlias(normalized)) {
+    throwUnsupportedBrowserProAlias(model);
   }
 
   // Explicit model variants: keep as-is (they have their own browser labels)
@@ -111,16 +103,114 @@ export function normalizeChatGptModelForBrowser(model: ModelName): ModelName {
   return model;
 }
 
+function isUnsupportedBrowserProAlias(model: string): boolean {
+  return (
+    model === "gpt-5.4-pro" ||
+    model === "gpt-5.2-pro" ||
+    model === "gpt-5.1-pro" ||
+    model === "gpt-5-pro"
+  );
+}
+
+function normalizePickerLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function defaultThinkingTimeForBrowserModel(model: ModelName): ThinkingTimeLevel | undefined {
+  return normalizeChatGptModelForBrowser(model) === "gpt-5.5-pro" ? "extended" : undefined;
+}
+
+export function normalizeBrowserModelLabelOverride(label: string | undefined): {
+  label: string | undefined;
+  thinkingTime?: ThinkingTimeLevel;
+} {
+  const trimmed = label?.trim();
+  if (!trimmed) {
+    return { label: undefined };
+  }
+  if (isDeepResearchModelAlias(trimmed)) {
+    return { label: undefined };
+  }
+
+  const normalized = normalizePickerLabel(trimmed);
+  const isProAlias = normalized === "pro" || normalized === "chatgpt pro";
+  const isUnsupportedExplicitProAlias =
+    normalized === "gpt 5 4 pro" ||
+    normalized === "gpt 5 2 pro" ||
+    normalized === "gpt 5 1 pro" ||
+    normalized === "gpt 5 pro" ||
+    normalized === "chatgpt 5 4 pro" ||
+    normalized === "chatgpt 5 2 pro" ||
+    normalized === "chatgpt 5 1 pro" ||
+    normalized === "chatgpt 5 pro" ||
+    normalized === "5 4 pro" ||
+    normalized === "5 2 pro" ||
+    normalized === "5 1 pro" ||
+    normalized === "5 pro";
+  const isLegacyExtendedProAlias =
+    normalized === "extended pro" ||
+    normalized === "gpt 5 5 pro" ||
+    normalized === "chatgpt 5 5 pro" ||
+    normalized === "5 5 pro";
+
+  if (isUnsupportedExplicitProAlias) {
+    throwUnsupportedBrowserProAlias(trimmed);
+  }
+  if (isProAlias) {
+    return { label: "Pro" };
+  }
+  if (isLegacyExtendedProAlias) {
+    return { label: "Pro", thinkingTime: "extended" };
+  }
+
+  return { label: trimmed };
+}
+
+export function resolveBrowserThinkingTime(
+  input: string | undefined,
+  model: ModelName,
+  explicitThinkingTime?: ThinkingTimeLevel,
+): ThinkingTimeLevel | undefined {
+  if (explicitThinkingTime) {
+    return explicitThinkingTime;
+  }
+
+  const trimmed = input?.trim();
+  const normalizedOverride = normalizeBrowserModelLabelOverride(trimmed);
+  if (normalizedOverride.thinkingTime) {
+    return normalizedOverride.thinkingTime;
+  }
+  if (!trimmed || trimmed.toLowerCase() === model.toLowerCase()) {
+    return defaultThinkingTimeForBrowserModel(model);
+  }
+  return undefined;
+}
+
 export async function buildBrowserConfig(
   options: BrowserFlagOptions,
 ): Promise<BrowserSessionConfig> {
-  const desiredModelOverride = options.browserModelLabel?.trim();
+  const rawModelOverrideInput = options.browserModelLabel?.trim();
+  const deepResearchLabelOverride = isDeepResearchModelAlias(rawModelOverrideInput);
+  const rawModelOverride = deepResearchLabelOverride ? undefined : rawModelOverrideInput;
+  const normalizedModelOverride = normalizeBrowserModelLabelOverride(rawModelOverride);
+  const desiredModelOverride = normalizedModelOverride.label;
   const normalizedOverride = desiredModelOverride?.toLowerCase() ?? "";
   const baseModel = options.model.toLowerCase();
+  if (isUnsupportedBrowserProAlias(baseModel)) {
+    throwUnsupportedBrowserProAlias(options.model);
+  }
   const isChatGptModel = baseModel.startsWith("gpt-") && !baseModel.includes("codex");
-  const shouldUseOverride = normalizedOverride.length > 0 && normalizedOverride !== baseModel;
+  const rawOverrideMatchesModel = rawModelOverride?.toLowerCase() === baseModel;
+  const shouldUseOverride =
+    normalizedOverride.length > 0 && normalizedOverride !== baseModel && !rawOverrideMatchesModel;
   const modelStrategy =
     normalizeBrowserModelStrategy(options.browserModelStrategy) ?? DEFAULT_MODEL_STRATEGY;
+  const composerMode =
+    options.browserComposerMode ??
+    (options.browserDeepResearch || deepResearchLabelOverride ? "deep-research" : undefined);
   const cookieNames = parseCookieNames(
     options.browserCookieNames ?? process.env.ORACLE_BROWSER_COOKIE_NAMES,
   );
@@ -159,6 +249,11 @@ export async function buildBrowserConfig(
         'Remove "temporary-chat=true" from --chatgpt-url (or omit --chatgpt-url), or use a non-Pro model (e.g. --model gpt-5.2).',
     );
   }
+
+  const thinkingTime =
+    composerMode && !options.browserThinkingTime
+      ? undefined
+      : resolveBrowserThinkingTime(rawModelOverride, options.model, options.browserThinkingTime);
 
   return {
     chromeProfile: options.browserChromeProfile ?? DEFAULT_CHROME_PROFILE,
@@ -211,7 +306,8 @@ export async function buildBrowserConfig(
     // Allow cookie failures by default so runs can continue without Chrome/Keychain secrets.
     allowCookieErrors: options.browserAllowCookieErrors ?? true,
     remoteChrome,
-    thinkingTime: options.browserThinkingTime,
+    thinkingTime,
+    composerMode,
   };
 }
 
@@ -224,8 +320,17 @@ function selectBrowserPort(options: BrowserFlagOptions): number | null {
   return candidate;
 }
 
+function throwUnsupportedBrowserProAlias(model: ModelName): never {
+  throw new Error(
+    `Unsupported ChatGPT browser Pro model "${model}". Browser Pro selection supports only gpt-5.5-pro; use --model gpt-5.5-pro or --browser-model-label "Pro" --browser-thinking-time extended.`,
+  );
+}
+
 export function mapModelToBrowserLabel(model: ModelName): string {
   const normalized = normalizeChatGptModelForBrowser(model);
+  if (isUnsupportedBrowserProAlias(normalized.toLowerCase())) {
+    throwUnsupportedBrowserProAlias(model);
+  }
   // Iterate ordered array to find first match (most specific first)
   for (const [key, label] of BROWSER_MODEL_LABELS) {
     if (key === normalized) {
@@ -244,7 +349,7 @@ export function resolveBrowserModelLabel(input: string | undefined, model: Model
   if (normalizedInput === model.toLowerCase()) {
     return mapModelToBrowserLabel(model);
   }
-  return trimmed;
+  return normalizeBrowserModelLabelOverride(trimmed).label ?? mapModelToBrowserLabel(model);
 }
 
 function parseRemoteChromeTarget(raw: string): { host: string; port: number } {

@@ -7,6 +7,7 @@ import {
   readFiles,
   getFileTokenStats,
   printFileTokenStats,
+  PromptValidationError,
   type RunOracleOptions,
   type PreviewMode,
 } from "../oracle.js";
@@ -68,6 +69,12 @@ async function runApiDryRun(
   const modelConfig = isKnownModel(runOptions.model)
     ? MODEL_CONFIGS[runOptions.model]
     : MODEL_CONFIGS["gpt-5.1"];
+  if (modelConfig.requiresSearch && runOptions.search === false) {
+    throw new PromptValidationError(
+      `${modelConfig.model} requires at least one data-source tool. Oracle currently provides web search for deep research, so omit --search off or enable --search on.`,
+      { model: modelConfig.model, search: false },
+    );
+  }
   const tokenizer = modelConfig.tokenizer;
   const estimatedInputTokens = tokenizer(
     [

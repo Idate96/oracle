@@ -28,6 +28,8 @@ const MODEL_ID_MAP: Record<ModelName, string> = {
   "gpt-5.2": "gpt-5.2",
   "gpt-5.2-instant": "gpt-5.2-instant",
   "gpt-5.2-pro": "gpt-5.2-pro",
+  "o3-deep-research": "o3-deep-research",
+  "o4-mini-deep-research": "o4-mini-deep-research",
   "claude-4.5-sonnet": "claude-4.5-sonnet",
   "claude-4.1-opus": "claude-4.1-opus",
   "grok-4.1": "grok-4.1",

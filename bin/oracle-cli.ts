@@ -46,12 +46,13 @@ import {
   parseDurationOption,
   mergePathLikeOptions,
   dedupePathInputs,
+  isDeepResearchModelAlias,
 } from "../src/cli/options.js";
 import { copyToClipboard } from "../src/cli/clipboard.js";
 import { buildMarkdownBundle } from "../src/cli/markdownBundle.js";
 import { shouldDetachSession } from "../src/cli/detach.js";
 import { applyHiddenAliases } from "../src/cli/hiddenAliases.js";
-import { buildBrowserConfig, resolveBrowserModelLabel } from "../src/cli/browserConfig.js";
+import { buildBrowserConfig } from "../src/cli/browserConfig.js";
 import { performSessionRun } from "../src/cli/sessionRunner.js";
 import type { BrowserSessionRunnerDeps } from "../src/browser/sessionRunner.js";
 import { isMediaFile } from "../src/browser/prompt.js";
@@ -143,6 +144,8 @@ interface CliOptions extends OptionValues {
   browserManualLogin?: boolean;
   browserManualLoginProfileDir?: string;
   browserThinkingTime?: "light" | "standard" | "extended" | "heavy";
+  browserDeepResearch?: boolean;
+  browserComposerMode?: "deep-research" | null;
   browserAllowCookieErrors?: boolean;
   browserAttachments?: string;
   browserInlineFiles?: boolean;
@@ -247,7 +250,7 @@ program.hook("preAction", (thisCommand) => {
 program
   .name("oracle")
   .description(
-    "One-shot GPT-5.4 Pro / GPT-5.4 / GPT-5.1 Codex tool for hard questions that benefit from large file context and server-side search.",
+    "One-shot GPT-5.5 Pro / Deep Research / GPT-5.4 / GPT-5.1 Codex tool for hard questions that benefit from large file context and server-side search.",
   )
   .version(VERSION)
   .argument("[prompt]", "Prompt text (shorthand for --prompt).")
@@ -301,7 +304,7 @@ program
   .option("-s, --slug <words>", "Custom session slug (3-5 words).")
   .option(
     "-m, --model <model>",
-    'Model to target (gpt-5.4-pro default). Also gpt-5.4, gpt-5.1-pro, gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3.1-pro API-only, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, or ChatGPT labels like "5.2 Thinking" for browser runs).',
+    "Model to target (gpt-5.5-pro default). Browser Pro mode supports only gpt-5.5-pro; API also supports o3-deep-research/o4-mini-deep-research, aliases such as gpt-5.1-pro/gpt-5.2-pro/gpt-5.4-pro, plus gpt-5.4, gpt-5.2, gemini-3-pro, claude-4.5-sonnet, and OpenRouter ids.",
     normalizeModelOption,
   )
   .addOption(
@@ -582,7 +585,7 @@ program
   .addOption(
     new Option(
       "--browser-model-label <label>",
-      'Exact ChatGPT model picker label to select in browser mode, e.g. "GPT-5.5 Pro".',
+      'Exact ChatGPT model picker label to select in browser mode, e.g. "Pro".',
     ),
   )
   .addOption(
@@ -598,6 +601,12 @@ program
     )
       .choices(["light", "standard", "extended", "heavy"])
       .hideHelp(),
+  )
+  .addOption(
+    new Option(
+      "--browser-deep-research",
+      "Browser-only: select ChatGPT Deep research from the composer tools menu before sending.",
+    ),
   )
   .addOption(
     new Option(
@@ -970,6 +979,7 @@ function buildRunOptions(
       "auto",
     browserInlineFiles: overrides.browserInlineFiles ?? options.browserInlineFiles ?? false,
     browserBundleFiles: overrides.browserBundleFiles ?? options.browserBundleFiles ?? false,
+    browserComposerMode: overrides.browserComposerMode ?? options.browserComposerMode ?? undefined,
     background: overrides.background ?? undefined,
     renderPlain: overrides.renderPlain ?? options.renderPlain ?? false,
     writeOutputPath: overrides.writeOutputPath ?? options.writeOutputPath,
@@ -1195,6 +1205,7 @@ function buildRunOptionsFromMetadata(metadata: SessionMetadata): RunOracleOption
     browserAttachments: stored.browserAttachments,
     browserInlineFiles: stored.browserInlineFiles,
     browserBundleFiles: stored.browserBundleFiles,
+    browserComposerMode: stored.browserComposerMode,
     background: stored.background,
     renderPlain: stored.renderPlain,
     writeOutputPath: stored.writeOutputPath,
@@ -1310,7 +1321,12 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     throw new Error("--dry-run cannot be combined with --render-markdown.");
   }
 
-  const preferredEngine = options.engine ?? userConfig.engine;
+  if (options.browserDeepResearch && options.engine === "api") {
+    throw new Error("--browser-deep-research requires --engine browser.");
+  }
+  const preferredEngine = options.browserDeepResearch
+    ? "browser"
+    : (options.engine ?? userConfig.engine);
   let engine: EngineMode = resolveEngine({
     engine: preferredEngine,
     browserFlag: options.browser,
@@ -1369,10 +1385,16 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     : [];
   const cliModelArg =
     normalizeModelOption(options.model) || (multiModelProvided ? "" : DEFAULT_MODEL);
+  const deepResearchModelAliasRequested = isDeepResearchModelAlias(cliModelArg);
+  const browserDeepResearchRequested =
+    engine === "browser" &&
+    (Boolean(options.browserDeepResearch) || deepResearchModelAliasRequested);
   const resolvedModelCandidate: ModelName = multiModelProvided
     ? normalizedMultiModels[0]
     : engine === "browser"
-      ? inferModelFromLabel(cliModelArg || DEFAULT_MODEL)
+      ? deepResearchModelAliasRequested
+        ? DEFAULT_MODEL
+        : inferModelFromLabel(cliModelArg || DEFAULT_MODEL)
       : resolveApiModel(cliModelArg || DEFAULT_MODEL);
   const primaryModelCandidate = normalizedMultiModels[0] ?? resolvedModelCandidate;
   const isGemini = primaryModelCandidate.startsWith("gemini");
@@ -1429,6 +1451,10 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   );
   const { models: _rawModels, ...optionsWithoutModels } = options;
   const resolvedOptions: ResolvedCliOptions = { ...optionsWithoutModels, model: resolvedModel };
+  if (browserDeepResearchRequested) {
+    resolvedOptions.browserDeepResearch = true;
+    resolvedOptions.browserComposerMode = "deep-research";
+  }
   resolvedOptions.maxFileSizeBytes = resolveConfiguredMaxFileSizeBytes(userConfig, process.env);
   if (normalizedMultiModels.length > 0) {
     resolvedOptions.models = normalizedMultiModels;
@@ -1632,6 +1658,10 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   const getSource = (key: keyof CliOptions) =>
     program.getOptionValueSource?.(key as string) ?? undefined;
   applyBrowserDefaultsFromConfig(options, userConfig, getSource);
+  const optionWasExplicit = (key: keyof CliOptions): boolean => {
+    const source = getSource(key);
+    return source !== undefined && source !== "default";
+  };
 
   const notifications = resolveNotificationSettings({
     cliNotify: options.notify,
@@ -1643,14 +1673,31 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   const sessionMode: SessionMode = engine === "browser" ? "browser" : "api";
   const browserModelLabelOverride =
     sessionMode === "browser"
-      ? resolveBrowserModelLabel(options.browserModelLabel ?? cliModelArg, resolvedModel)
+      ? deepResearchModelAliasRequested
+        ? options.browserModelLabel
+        : (options.browserModelLabel ?? cliModelArg)
       : undefined;
+  const browserModelStrategyOverride =
+    sessionMode === "browser" &&
+    deepResearchModelAliasRequested &&
+    !options.browserModelLabel &&
+    !options.browserModelStrategy
+      ? "current"
+      : options.browserModelStrategy;
+  const browserThinkingTimeOverride =
+    browserDeepResearchRequested && !optionWasExplicit("browserThinkingTime")
+      ? undefined
+      : options.browserThinkingTime;
   const browserConfig =
     sessionMode === "browser"
       ? await buildBrowserConfig({
           ...options,
           model: resolvedModel,
           browserModelLabel: browserModelLabelOverride,
+          browserModelStrategy: browserModelStrategyOverride,
+          browserThinkingTime: browserThinkingTimeOverride,
+          browserDeepResearch: browserDeepResearchRequested,
+          browserComposerMode: browserDeepResearchRequested ? "deep-research" : undefined,
         })
       : undefined;
 

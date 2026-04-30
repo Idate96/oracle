@@ -11,6 +11,8 @@ export type KnownModelName =
   | "gpt-5.2"
   | "gpt-5.2-instant"
   | "gpt-5.2-pro"
+  | "o3-deep-research"
+  | "o4-mini-deep-research"
   | "gemini-3.1-pro"
   | "gemini-3-pro"
   | "claude-4.5-sonnet"
@@ -26,6 +28,8 @@ export type ProModelName =
   | "gpt-5.1-pro"
   | "gpt-5-pro"
   | "gpt-5.2-pro"
+  | "o3-deep-research"
+  | "o4-mini-deep-research"
   | "claude-4.5-sonnet"
   | "claude-4.1-opus";
 
@@ -68,6 +72,8 @@ export interface ModelConfig {
   supportsBackground?: boolean;
   supportsSearch?: boolean;
   searchToolType?: ToolConfig["type"];
+  /** This model requires at least one data-source tool; Oracle currently provides web search. */
+  requiresSearch?: boolean;
 }
 
 export interface FileContent {
@@ -165,6 +171,8 @@ export interface RunOracleOptions {
   browserAttachments?: "auto" | "never" | "always";
   browserInlineFiles?: boolean;
   browserBundleFiles?: boolean;
+  /** Browser-only: ChatGPT composer mode/tool to enable before submitting. */
+  browserComposerMode?: "deep-research" | null;
   background?: boolean;
   /** Optional absolute path to save only the assistant's final text output. */
   writeOutputPath?: string;

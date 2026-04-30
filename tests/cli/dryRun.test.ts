@@ -30,6 +30,22 @@ describe("runDryRunSummary", () => {
     expect(log.mock.calls.some(([entry]) => String(entry).includes("File Token Usage"))).toBe(true);
   });
 
+  test("rejects deep research dry runs when search is disabled", async () => {
+    const log = vi.fn();
+    await expect(
+      runDryRunSummary(
+        {
+          engine: "api",
+          runOptions: { ...baseRunOptions, model: "o3-deep-research", search: false },
+          cwd: "/repo",
+          version: "1.2.3",
+          log,
+        },
+        { readFilesImpl: async () => [] },
+      ),
+    ).rejects.toThrow(/requires at least one data-source tool/i);
+  });
+
   test("prints browser attachment summary", async () => {
     const log = vi.fn();
     await runDryRunSummary(

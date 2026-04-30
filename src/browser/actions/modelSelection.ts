@@ -12,7 +12,10 @@ export async function ensureModelSelection(
   desiredModel: string,
   logger: BrowserLogger,
   strategy: BrowserModelStrategy = "select",
-) {
+): Promise<{
+  status: "already-selected" | "switched" | "switched-best-effort";
+  label?: string | null;
+}> {
   const outcome = await Runtime.evaluate({
     expression: buildModelSelectionExpression(desiredModel, strategy),
     awaitPromise: true,
@@ -35,8 +38,10 @@ export async function ensureModelSelection(
     case "switched":
     case "switched-best-effort": {
       const label = result.label ?? desiredModel;
-      logger(`Model picker: ${label}`);
-      return;
+      const suffix =
+        result.status === "switched-best-effort" ? " (best effort; top bar may stay generic)" : "";
+      logger(`Model picker: ${label}${suffix}`);
+      return { status: result.status, label };
     }
     case "option-not-found": {
       await logDomFailure(Runtime, logger, "model-switcher-option");
@@ -91,7 +96,7 @@ function buildModelSelectionExpression(
   return `(() => {
     ${buildClickDispatcher()}
     // Capture the selectors and matcher literals up front so the browser expression stays pure.
-    const BUTTON_SELECTOR = '${MODEL_BUTTON_SELECTOR}';
+    const BUTTON_SELECTOR = ${JSON.stringify(MODEL_BUTTON_SELECTOR)};
     const LABEL_TOKENS = ${labelLiteral};
     const TEST_IDS = ${idLiteral};
     const PRIMARY_LABEL = ${primaryLabelLiteral};
@@ -115,7 +120,8 @@ function buildModelSelectionExpression(
       .map((token) => normalizeText(token))
       .filter(Boolean);
     const targetWords = normalizedTarget.split(' ').filter(Boolean);
-    const desiredVersion = normalizedTarget.includes('5 5')
+    const targetIsBarePro = normalizedTarget === 'pro';
+    const desiredVersion = normalizedTarget.includes('5 5') || targetIsBarePro
       ? '5-5'
       : normalizedTarget.includes('5 4')
       ? '5-4'
@@ -127,6 +133,7 @@ function buildModelSelectionExpression(
             ? '5-0'
             : null;
     const wantsPro = normalizedTarget.includes(' pro') || normalizedTarget.endsWith(' pro') || normalizedTokens.includes('pro');
+    const wantsExtended = normalizedTarget.includes('extended');
     const wantsInstant = normalizedTarget.includes('instant');
     const wantsThinking = normalizedTarget.includes('thinking');
 
@@ -169,7 +176,8 @@ function buildModelSelectionExpression(
         if (desiredVersion === '5-1' && !normalizedLabel.includes('5 1')) return false;
         if (desiredVersion === '5-0' && !normalizedLabel.includes('5 0')) return false;
       }
-      if (wantsPro && !normalizedLabel.includes(' pro')) return false;
+      if (wantsPro && !(normalizedLabel.includes(' pro') || normalizedLabel.startsWith('pro '))) return false;
+      if (wantsExtended && !normalizedLabel.includes('extended')) return false;
       if (wantsInstant && !normalizedLabel.includes('instant')) return false;
       if (wantsThinking && !normalizedLabel.includes('thinking')) return false;
       // Also reject if button has variants we DON'T want
@@ -289,6 +297,9 @@ function buildModelSelectionExpression(
           score += 380;
         }
       }
+      if (wantsExtended && !normalizedText.includes('extended') && !normalizedTestId.includes('extended')) {
+        return 0;
+      }
       for (const token of normalizedTokens) {
         // Reward partial matches to the expanded label/token set.
         if (token && normalizedText.includes(token)) {
@@ -307,7 +318,7 @@ function buildModelSelectionExpression(
       }
       // If the caller didn't explicitly ask for Pro, prefer non-Pro options when both exist.
       if (wantsPro) {
-        if (!normalizedText.includes(' pro')) {
+        if (!(normalizedText.includes(' pro') || normalizedText.startsWith('pro '))) {
           score -= 80;
         }
       } else if (normalizedText.includes(' pro')) {
@@ -570,7 +581,14 @@ function buildModelMatchersLiteral(targetModel: string): {
     push("proresearch", labelTokens);
     push("research grade", labelTokens);
     push("advanced reasoning", labelTokens);
+    if (base === "pro" || base === "extended pro") {
+      testIdTokens.add("model-switcher-gpt-5-5-pro");
+      testIdTokens.add("gpt-5-5-pro");
+      testIdTokens.add("gpt-5.5-pro");
+      testIdTokens.add("gpt55pro");
+    }
     if (base.includes("5.5") || base.includes("5-5") || base.includes("55")) {
+      testIdTokens.add("model-switcher-gpt-5-5-pro");
       testIdTokens.add("gpt-5.5-pro");
       testIdTokens.add("gpt-5-5-pro");
       testIdTokens.add("gpt55pro");

@@ -18,11 +18,13 @@ import { buildClickDispatcher } from "./domEvents.js";
 const ASSISTANT_POLL_TIMEOUT_ERROR = "assistant-response-watchdog-timeout";
 
 function isAnswerNowPlaceholderText(normalized: string): boolean {
-  const text = normalized.trim();
+  const text = normalized.toLowerCase().replace(/\s+/g, " ").trim();
   if (!text) return false;
-  // Learned: "Pro thinking" shows a placeholder turn that contains "Answer now".
+  // Learned: "Pro thinking" shows a placeholder turn before the final answer.
+  // Some ChatGPT layouts include an "Answer now" gate; newer layouts can expose only the bare text.
   // That is not the final answer and must be ignored in browser automation.
   if (text === "chatgpt said:" || text === "chatgpt said") return true;
+  if (text === "pro thinking" || text === "chatgpt said: pro thinking") return true;
   if (
     text.includes("file upload request") &&
     (text.includes("pro thinking") || text.includes("chatgpt said"))
@@ -32,6 +34,10 @@ function isAnswerNowPlaceholderText(normalized: string): boolean {
   return (
     text.includes("answer now") && (text.includes("pro thinking") || text.includes("chatgpt said"))
   );
+}
+
+export function isAssistantPlaceholderTextForTest(text: string): boolean {
+  return isAnswerNowPlaceholderText(text);
 }
 
 export async function waitForAssistantResponse(
@@ -556,8 +562,9 @@ function buildAssistantSnapshotExpression(minTurnIndex?: number): string {
     ${buildAssistantExtractor("extractAssistantTurn")}
     const extracted = extractAssistantTurn();
     const isPlaceholder = (snapshot) => {
-      const normalized = String(snapshot?.text ?? '').toLowerCase().trim();
+      const normalized = String(snapshot?.text ?? '').toLowerCase().replace(/\\s+/g, ' ').trim();
       if (normalized === 'chatgpt said:' || normalized === 'chatgpt said') return true;
+      if (normalized === 'pro thinking' || normalized === 'chatgpt said: pro thinking') return true;
       if (normalized.includes('file upload request') && (normalized.includes('pro thinking') || normalized.includes('chatgpt said'))) {
         return true;
       }
@@ -590,8 +597,9 @@ function buildResponseObserverExpression(timeoutMs: number, minTurnIndex?: numbe
     // Learned: settling avoids capturing mid-stream HTML; keep short.
     const settleDelayMs = 800;
     const isAnswerNowPlaceholder = (snapshot) => {
-      const normalized = String(snapshot?.text ?? '').toLowerCase().trim();
+      const normalized = String(snapshot?.text ?? '').toLowerCase().replace(/\\s+/g, ' ').trim();
       if (normalized === 'chatgpt said:' || normalized === 'chatgpt said') return true;
+      if (normalized === 'pro thinking' || normalized === 'chatgpt said: pro thinking') return true;
       if (normalized.includes('file upload request') && (normalized.includes('pro thinking') || normalized.includes('chatgpt said'))) {
         return true;
       }
@@ -788,10 +796,12 @@ function buildResponseObserverExpression(timeoutMs: number, minTurnIndex?: numbe
 function buildAssistantExtractor(functionName: string): string {
   const conversationLiteral = JSON.stringify(CONVERSATION_TURN_SELECTOR);
   const assistantLiteral = JSON.stringify(ASSISTANT_ROLE_SELECTOR);
+  const finishedActionsLiteral = JSON.stringify(FINISHED_ACTIONS_SELECTOR);
   return `const ${functionName} = () => {
     ${buildClickDispatcher()}
     const CONVERSATION_SELECTOR = ${conversationLiteral};
     const ASSISTANT_SELECTOR = ${assistantLiteral};
+    const FINISHED_ACTIONS_SELECTOR = ${finishedActionsLiteral};
     const isAssistantTurn = (node) => {
       if (!(node instanceof HTMLElement)) return false;
       const turnAttr = (node.getAttribute('data-turn') || node.dataset?.turn || '').toLowerCase();
@@ -852,8 +862,21 @@ function buildAssistantExtractor(functionName: string): string {
       const html = contentRoot?.innerHTML ?? '';
       const messageId = messageRoot.getAttribute('data-message-id');
       const turnId = messageRoot.getAttribute('data-testid');
-      if (text.trim()) {
+      const trimmedText = text.trim();
+      const isOnlyAssistantLabel = /^chatgpt said:?$/i.test(trimmedText);
+      const hasSandboxReport = Boolean(contentRoot.querySelector('iframe'));
+      const isFinished = Boolean(turn.querySelector(FINISHED_ACTIONS_SELECTOR));
+      if (trimmedText && !isOnlyAssistantLabel) {
         return { text, html, messageId, turnId, turnIndex: index };
+      }
+      if (hasSandboxReport && isFinished) {
+        return {
+          text: 'Deep research report rendered in sandbox iframe.',
+          html,
+          messageId,
+          turnId,
+          turnIndex: index,
+        };
       }
     }
     return null;

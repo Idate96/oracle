@@ -64,7 +64,7 @@ export function applyHelpStyling(program: Command, version: string, isTty: boole
 
 function renderHelpBanner(version: string, colors: HelpColors): string {
   const subtitle =
-    "Prompt + files required — GPT-5.5 Pro for tough questions with code/file context.";
+    "Prompt + files required — GPT-5.5 Pro and Deep Research for hard questions with context.";
   return `${colors.banner(`Oracle CLI v${version}`)} ${colors.subtitle(`— ${subtitle}`)}\n`;
 }
 
@@ -97,6 +97,14 @@ function renderHelpFooter(program: Command, colors: HelpColors): string {
     formatExample(
       `${program.name()} --prompt "Cross-check the data layer assumptions" --models gpt-5.2-pro,gemini-3-pro --file "src/**/*.ts"`,
       "Run multiple API models in one go and aggregate cost/usage.",
+    ),
+    formatExample(
+      `${program.name()} --engine api --model o3-deep-research --prompt "Research current SOC 2 evidence automation options"`,
+      "Run an OpenAI Deep Research query with web search and background mode.",
+    ),
+    formatExample(
+      `${program.name()} --engine browser --browser-deep-research --prompt "Research current SOC 2 evidence automation options"`,
+      "Run a ChatGPT browser Deep research query through the composer tools menu.",
     ),
     formatExample(
       `${program.name()} status --hours 72 --limit 50`,

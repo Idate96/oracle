@@ -120,7 +120,9 @@ function buildThinkingTimeExpression(level: ThinkingTimeLevel): string {
 
     const CHIP_SELECTORS = [
       '[data-testid="composer-footer-actions"] button[aria-haspopup="menu"]',
+      '[data-testid="model-switcher-dropdown-button"]',
       'button.__composer-pill[aria-haspopup="menu"]',
+      'button.__composer-pill',
       '.__composer-pill-composite button[aria-haspopup="menu"]',
     ];
 
@@ -149,7 +151,23 @@ function buildThinkingTimeExpression(level: ThinkingTimeLevel): string {
           if (aria.includes('pro') || text.includes('pro')) {
             return btn;
           }
+
+          // New ChatGPT UI labels the combined model/effort pill with just the
+          // current effort level (for example "Extended"). The side selector
+          // inside that menu then exposes Pro/Thinking effort options.
+          if (text.includes('extended') || text.includes('standard') || text.includes('light') || text.includes('heavy')) {
+            return btn;
+          }
         }
+      }
+      const visibleComposerPill = Array.from(document.querySelectorAll('button.__composer-pill'))
+        .find((node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+      if (visibleComposerPill) {
+        return visibleComposerPill;
       }
       return null;
     };
@@ -163,9 +181,61 @@ function buildThinkingTimeExpression(level: ThinkingTimeLevel): string {
 
     return new Promise((resolve) => {
       const start = performance.now();
+      let effortClicked = false;
+
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+
+      const clickEffortSelector = () => {
+        if (effortClicked) {
+          return false;
+        }
+        const selectors = [
+          '[data-testid="model-switcher-gpt-5-5-pro-thinking-effort"]',
+          '[data-testid="model-switcher-gpt-5-5-thinking-thinking-effort"]',
+          '[data-testid$="-thinking-effort"]',
+        ];
+        for (const selector of selectors) {
+          const candidates = Array.from(document.querySelectorAll(selector));
+          const candidate = candidates.find((node) => isVisible(node));
+          if (candidate) {
+            effortClicked = true;
+            dispatchClickSequence(candidate);
+            return true;
+          }
+        }
+        const rows = Array.from(document.querySelectorAll('[role="menuitemradio"]'));
+        const preferredRows = [
+          ...rows.filter((row) => normalize(row.textContent ?? '').includes('pro')),
+          ...rows.filter((row) => normalize(row.textContent ?? '').includes('thinking')),
+        ];
+        for (const row of preferredRows) {
+          const button = row.parentElement?.querySelector?.('button[aria-label="Effort"]') ??
+            row.querySelector?.('button[aria-label="Effort"]');
+          if (button && isVisible(button)) {
+            effortClicked = true;
+            dispatchClickSequence(button);
+            return true;
+          }
+        }
+        return false;
+      };
 
       const findMenu = () => {
         const menus = document.querySelectorAll(MENU_CONTAINER_SELECTOR + ', [role="group"]');
+        const effortMenus = Array.from(menus)
+          .filter((menu) => {
+            const text = normalize(menu.textContent ?? '');
+            return text.includes('standard') && text.includes('extended');
+          })
+          .sort((a, b) => a.getBoundingClientRect().width - b.getBoundingClientRect().width);
+        if (effortMenus.length > 0) {
+          return effortMenus[0];
+        }
+        clickEffortSelector();
         for (const menu of menus) {
           const label = menu.querySelector?.('.__menu-label, [class*="menu-label"]');
           if (normalize(label?.textContent ?? '').includes('thinking time')) {

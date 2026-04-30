@@ -25,7 +25,12 @@ import { CHATGPT_URL } from "../../browser/constants.js";
 import { consultInputSchema } from "../types.js";
 import { loadUserConfig, type UserConfig } from "../../config.js";
 import { resolveNotificationSettings } from "../../cli/notifier.js";
-import { mapModelToBrowserLabel, resolveBrowserModelLabel } from "../../cli/browserConfig.js";
+import {
+  mapModelToBrowserLabel,
+  resolveBrowserModelLabel,
+  resolveBrowserThinkingTime,
+} from "../../cli/browserConfig.js";
+import { isDeepResearchModelAlias } from "../../cli/options.js";
 
 // Use raw shapes so the MCP SDK (with its bundled Zod) wraps them and emits valid JSON Schema.
 const consultInputShape = {
@@ -40,7 +45,7 @@ const consultInputShape = {
     .string()
     .optional()
     .describe(
-      "Single model name/label. Prefer setting `engine` explicitly to avoid default surprises.",
+      "Single model name/label. Deep research aliases target API models with `engine:api` and ChatGPT Deep research composer mode with `engine:browser`. Prefer setting `engine` explicitly to avoid default surprises.",
     ),
   models: z
     .array(z.string())
@@ -72,6 +77,10 @@ const consultInputShape = {
     .enum(["light", "standard", "extended", "heavy"])
     .optional()
     .describe("Browser-only: set ChatGPT thinking time when supported by the chosen model."),
+  browserDeepResearch: z
+    .boolean()
+    .optional()
+    .describe("Browser-only: select ChatGPT Deep research from the composer tools menu."),
   browserKeepBrowser: z
     .boolean()
     .optional()
@@ -165,6 +174,7 @@ export function buildConsultBrowserConfig({
   inputModel,
   browserModelLabel,
   browserThinkingTime,
+  browserDeepResearch,
   browserKeepBrowser,
 }: {
   userConfig: UserConfig;
@@ -173,16 +183,25 @@ export function buildConsultBrowserConfig({
   inputModel?: string;
   browserModelLabel?: string;
   browserThinkingTime?: "light" | "standard" | "extended" | "heavy";
+  browserDeepResearch?: boolean;
   browserKeepBrowser?: boolean;
 }): BrowserSessionConfig {
   const configuredBrowser = userConfig.browser ?? {};
   const envProfileDir = (env.ORACLE_BROWSER_PROFILE_DIR ?? "").trim();
   const hasProfileDir = envProfileDir.length > 0;
   const preferredLabel = (browserModelLabel ?? inputModel)?.trim();
-  const isChatGptModel = runModel.startsWith("gpt-") && !runModel.includes("codex");
-  const desiredModelLabel = isChatGptModel
-    ? mapModelToBrowserLabel(runModel)
-    : resolveBrowserModelLabel(preferredLabel, runModel);
+  const deepResearchRequested =
+    Boolean(browserDeepResearch) || isDeepResearchModelAlias(preferredLabel);
+  const effectivePreferredLabel = isDeepResearchModelAlias(preferredLabel)
+    ? undefined
+    : preferredLabel;
+  const desiredModelLabel = resolveBrowserModelLabel(effectivePreferredLabel, runModel);
+  const inputThinkingTime =
+    browserThinkingTime ??
+    (effectivePreferredLabel
+      ? resolveBrowserThinkingTime(effectivePreferredLabel, runModel)
+      : undefined);
+  const defaultThinkingTime = resolveBrowserThinkingTime(undefined, runModel);
   const configuredUrl = configuredBrowser.chatgptUrl ?? configuredBrowser.url ?? CHATGPT_URL;
   const manualLogin = hasProfileDir ? true : (configuredBrowser.manualLogin ?? false);
 
@@ -198,8 +217,18 @@ export function buildConsultBrowserConfig({
     manualLoginProfileDir: manualLogin
       ? ((envProfileDir || configuredBrowser.manualLoginProfileDir) ?? null)
       : null,
-    thinkingTime: browserThinkingTime ?? configuredBrowser.thinkingTime,
+    thinkingTime:
+      deepResearchRequested && !browserThinkingTime && !effectivePreferredLabel
+        ? undefined
+        : (inputThinkingTime ?? configuredBrowser.thinkingTime ?? defaultThinkingTime),
     desiredModel: desiredModelLabel || mapModelToBrowserLabel(runModel),
+    modelStrategy:
+      deepResearchRequested && !effectivePreferredLabel
+        ? "current"
+        : (configuredBrowser.modelStrategy ?? "select"),
+    composerMode: deepResearchRequested
+      ? "deep-research"
+      : (configuredBrowser.composerMode ?? undefined),
   };
 }
 
@@ -227,6 +256,7 @@ export function registerConsultTool(server: McpServer): void {
         browserAttachments,
         browserBundleFiles,
         browserThinkingTime,
+        browserDeepResearch,
         browserKeepBrowser,
         slug,
       } = consultInputSchema.parse(input);
@@ -240,6 +270,7 @@ export function registerConsultTool(server: McpServer): void {
         search,
         browserAttachments,
         browserBundleFiles,
+        browserDeepResearch,
         userConfig,
         env: process.env,
       });
@@ -283,6 +314,7 @@ export function registerConsultTool(server: McpServer): void {
           inputModel: model,
           browserModelLabel,
           browserThinkingTime,
+          browserDeepResearch,
           browserKeepBrowser,
         });
       }

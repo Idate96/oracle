@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildModelMatchersLiteralForTest } from "../../src/browser/actions/modelSelection.js";
+import {
+  buildModelMatchersLiteralForTest,
+  buildModelSelectionExpressionForTest,
+} from "../../src/browser/actions/modelSelection.js";
 
 const expectSome = (arr: string[], predicate: (s: string) => boolean) => {
   expect(arr.some(predicate)).toBe(true);
@@ -24,5 +27,11 @@ describe("browser model selection arbitrary labels", () => {
     expectSome(labelTokens, (t) => t.includes("extended"));
     expectSome(labelTokens, (t) => t.includes("pro"));
     expectSome(testIdTokens, (t) => t.includes("extended-pro"));
+  });
+
+  it("does not allow Extended Pro to fall back to a generic Pro option", () => {
+    const expression = buildModelSelectionExpressionForTest("Extended Pro");
+    expect(expression).toContain("const wantsExtended = normalizedTarget.includes('extended')");
+    expect(expression).toContain("wantsExtended && !normalizedText.includes('extended')");
   });
 });

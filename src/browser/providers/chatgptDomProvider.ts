@@ -1,8 +1,9 @@
-import type { BrowserLogger, ChromeClient } from "../types.js";
+import type { BrowserComposerMode, BrowserLogger, ChromeClient } from "../types.js";
 import type { ProviderDomAdapter, ProviderDomFlowContext } from "../providerDomFlow.js";
 import { ensurePromptReady } from "../actions/navigation.js";
 import { submitPrompt } from "../actions/promptComposer.js";
 import { waitForAssistantResponse } from "../actions/assistantResponse.js";
+import { ensureComposerMode } from "../actions/composerMode.js";
 
 interface ChatgptDomProviderState {
   runtime: ChromeClient["Runtime"];
@@ -12,6 +13,7 @@ interface ChatgptDomProviderState {
   inputTimeoutMs?: number;
   baselineTurns?: number | null;
   attachmentNames?: string[];
+  composerMode?: BrowserComposerMode | null;
   committedTurns?: number | null;
 }
 
@@ -30,6 +32,14 @@ async function waitForUi(ctx: ProviderDomFlowContext): Promise<void> {
 
 async function typePrompt(_ctx: ProviderDomFlowContext): Promise<void> {
   // submitPrompt() handles typing + send for ChatGPT.
+}
+
+async function selectMode(ctx: ProviderDomFlowContext): Promise<void> {
+  const state = requireState(ctx);
+  if (!state.composerMode) {
+    return;
+  }
+  await ensureComposerMode(state.runtime, state.composerMode, state.logger);
 }
 
 async function submitPromptViaAdapter(ctx: ProviderDomFlowContext): Promise<void> {
@@ -77,6 +87,7 @@ async function waitForResponse(ctx: ProviderDomFlowContext): Promise<{
 export const chatgptDomProvider: ProviderDomAdapter = {
   providerName: "chatgpt-web",
   waitForUi,
+  selectMode,
   typePrompt,
   submitPrompt: submitPromptViaAdapter,
   waitForResponse,

@@ -39,6 +39,17 @@ export interface BrowserSessionRunnerDeps {
   persistRuntimeHint?: (runtime: BrowserRuntimeMetadata) => Promise<void> | void;
 }
 
+function isGenericChatGptModelLabel(label: string | null | undefined): boolean {
+  const normalized = (label ?? "").trim().toLowerCase();
+  return ["chatgpt", "light", "standard", "extended", "heavy"].includes(normalized);
+}
+
+function requiresVerifiedProModel(browserConfig: BrowserSessionConfig): boolean {
+  const desiredModel = browserConfig.desiredModel?.trim() ?? "";
+  const modelStrategy = browserConfig.modelStrategy ?? "select";
+  return modelStrategy === "select" && /\bpro\b/i.test(desiredModel);
+}
+
 export async function runBrowserSessionExecution(
   { runOptions, browserConfig, cwd, log }: RunBrowserSessionArgs,
   deps: BrowserSessionRunnerDeps = {},
@@ -126,6 +137,15 @@ export async function runBrowserSessionExecution(
     }
     const message = error instanceof Error ? error.message : "Browser automation failed.";
     throw new BrowserAutomationError(message, { stage: "execute-browser" }, error);
+  }
+  if (
+    requiresVerifiedProModel(browserConfig) &&
+    isGenericChatGptModelLabel(browserResult.activeModelLabel)
+  ) {
+    throw new BrowserAutomationError(
+      `Browser model selection is unverified: requested "${browserConfig.desiredModel}" but the captured UI label is "${browserResult.activeModelLabel}".`,
+      { stage: "model-selection-verification" },
+    );
   }
   if (!runOptions.silent) {
     log(chalk.bold("Answer:"));

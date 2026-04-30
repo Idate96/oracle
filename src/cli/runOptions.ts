@@ -8,6 +8,7 @@ import {
   inferModelFromLabel,
   resolveApiModel,
   normalizeBaseUrl,
+  isDeepResearchModelAlias,
 } from "./options.js";
 import { resolveGeminiModelId } from "../oracle/gemini.js";
 import { PromptValidationError } from "../oracle/errors.js";
@@ -22,12 +23,17 @@ export interface ResolveRunOptionsInput {
   engine?: EngineMode;
   userConfig?: UserConfig;
   env?: NodeJS.ProcessEnv;
+  browserDeepResearch?: boolean;
 }
 
 export interface ResolvedRunOptions {
   runOptions: RunOracleOptions;
   resolvedEngine: EngineMode;
   engineCoercedToApi?: boolean;
+}
+
+function isDeepResearchModel(model: string): boolean {
+  return model === "o3-deep-research" || model === "o4-mini-deep-research";
 }
 
 export function resolveRunOptionsFromConfig({
@@ -38,6 +44,7 @@ export function resolveRunOptionsFromConfig({
   engine,
   userConfig,
   env = process.env,
+  browserDeepResearch,
 }: ResolveRunOptionsInput): ResolvedRunOptions {
   const resolvedEngine = resolveEngineWithConfig({ engine, configEngine: userConfig?.engine, env });
   const browserRequested = engine === "browser";
@@ -48,11 +55,16 @@ export function resolveRunOptionsFromConfig({
     .filter(Boolean);
 
   const cliModelArg = normalizeModelOption(model ?? userConfig?.model) || DEFAULT_MODEL;
+  const deepResearchAliasRequested = isDeepResearchModelAlias(cliModelArg);
+  const deepResearchBrowserRequested =
+    resolvedEngine === "browser" && (Boolean(browserDeepResearch) || deepResearchAliasRequested);
   const inferredModel =
     resolvedEngine === "browser" && normalizedRequestedModels.length === 0
-      ? inferModelFromLabel(cliModelArg)
+      ? deepResearchAliasRequested
+        ? DEFAULT_MODEL
+        : inferModelFromLabel(cliModelArg)
       : resolveApiModel(cliModelArg);
-  // Browser engine maps Pro/legacy aliases to the current ChatGPT Pro picker target.
+  // Browser engine normalizes ChatGPT labels and rejects legacy Pro aliases before dispatch.
   const resolvedModel =
     resolvedEngine === "browser" ? normalizeChatGptModelForBrowser(inferredModel) : inferredModel;
   const isCodex = resolvedModel.startsWith("gpt-5.1-codex");
@@ -66,9 +78,20 @@ export function resolveRunOptionsFromConfig({
       ? Array.from(new Set(normalizedRequestedModels.map((entry) => resolveApiModel(entry))))
       : [resolvedModel];
   const includesGeminiApiOnly = allModels.some((m) => m === "gemini-3.1-pro");
+  const includesDeepResearchApiOnly = allModels.some((m) => isDeepResearchModel(m));
   if ((browserRequested || browserConfigured) && includesGeminiApiOnly) {
     throw new PromptValidationError(
       "gemini-3.1-pro is API-only today. Use --engine api or switch to gemini-3-pro for Gemini web.",
+      { engine: "browser", models: allModels },
+    );
+  }
+  if (
+    (browserRequested || browserConfigured) &&
+    includesDeepResearchApiOnly &&
+    !deepResearchBrowserRequested
+  ) {
+    throw new PromptValidationError(
+      "Deep research models are API-only today. Use --engine api with o3-deep-research or o4-mini-deep-research.",
       { engine: "browser", models: allModels },
     );
   }
@@ -82,9 +105,21 @@ export function resolveRunOptionsFromConfig({
     );
   }
 
-  const engineCoercedToApi = engineWasBrowser && (isCodex || isClaude || isGrok || isGeminiApiOnly);
+  const isDeepResearchApiOnly = isDeepResearchModel(resolvedModel);
+  const engineCoercedToApi =
+    engineWasBrowser &&
+    (isCodex ||
+      isClaude ||
+      isGrok ||
+      isGeminiApiOnly ||
+      (isDeepResearchApiOnly && !deepResearchBrowserRequested));
   const fixedEngine: EngineMode =
-    isCodex || isClaude || isGrok || isGeminiApiOnly || normalizedRequestedModels.length > 0
+    isCodex ||
+    isClaude ||
+    isGrok ||
+    isGeminiApiOnly ||
+    (isDeepResearchApiOnly && !deepResearchBrowserRequested) ||
+    normalizedRequestedModels.length > 0
       ? "api"
       : resolvedEngine;
 
@@ -126,6 +161,7 @@ export function resolveRunOptionsFromConfig({
     background: userConfig?.background,
     baseUrl,
     effectiveModelId,
+    browserComposerMode: deepResearchBrowserRequested ? "deep-research" : undefined,
   };
 
   return { runOptions, resolvedEngine: fixedEngine, engineCoercedToApi };

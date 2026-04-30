@@ -15,7 +15,8 @@ describe("buildBrowserConfig", () => {
       headless: undefined,
       keepBrowser: undefined,
       hideWindow: undefined,
-      desiredModel: "Extended Pro",
+      desiredModel: "Pro",
+      thinkingTime: "extended",
       debug: undefined,
       allowCookieErrors: true,
     });
@@ -28,7 +29,7 @@ describe("buildBrowserConfig", () => {
 
   test("sets model strategy when provided", async () => {
     const config = await buildBrowserConfig({
-      model: "gpt-5.2-pro",
+      model: "gpt-5.5-pro",
       browserModelStrategy: "current",
     });
     expect(config.modelStrategy).toBe("current");
@@ -71,20 +72,61 @@ describe("buildBrowserConfig", () => {
     });
   });
 
-  test("prefers explicit browser model label when provided for non-GPT models", async () => {
+  test("prefers explicit browser model label when provided", async () => {
     const config = await buildBrowserConfig({
-      model: "gpt-5.2-pro",
+      model: "gpt-5.5-pro",
       browserModelLabel: "Instant",
     });
     expect(config.desiredModel).toBe("Instant");
   });
 
-  test("prefers explicit browser model label when provided for GPT models", async () => {
+  test("enables ChatGPT Deep research composer mode", async () => {
     const config = await buildBrowserConfig({
-      model: "gpt-5.4-pro",
+      model: "gpt-5.5-pro",
+      browserDeepResearch: true,
+      browserModelLabel: "Pro",
+    });
+    expect(config.desiredModel).toBe("Pro");
+    expect(config.composerMode).toBe("deep-research");
+  });
+
+  test("treats deepresearch browser label as composer mode, not picker label", async () => {
+    const config = await buildBrowserConfig({
+      model: "gpt-5.5-pro",
+      browserModelLabel: "deepresearch",
+      browserModelStrategy: "current",
+    });
+    expect(config.desiredModel).toBe("Pro");
+    expect(config.modelStrategy).toBe("current");
+    expect(config.composerMode).toBe("deep-research");
+  });
+
+  test("maps the legacy Extended Pro label to Pro with extended thinking", async () => {
+    const config = await buildBrowserConfig({
+      model: "gpt-5.5-pro",
       browserModelLabel: "Extended Pro",
     });
-    expect(config.desiredModel).toBe("Extended Pro");
+    expect(config.desiredModel).toBe("Pro");
+    expect(config.thinkingTime).toBe("extended");
+  });
+
+  test("lets explicit thinking time override legacy Extended Pro shorthand", async () => {
+    const config = await buildBrowserConfig({
+      model: "gpt-5.5-pro",
+      browserModelLabel: "Extended Pro",
+      browserThinkingTime: "heavy",
+    });
+    expect(config.desiredModel).toBe("Pro");
+    expect(config.thinkingTime).toBe("heavy");
+  });
+
+  test("does not infer extended thinking for an explicit Pro picker label", async () => {
+    const config = await buildBrowserConfig({
+      model: "gpt-5.5-pro",
+      browserModelLabel: "Pro",
+    });
+    expect(config.desiredModel).toBe("Pro");
+    expect(config.thinkingTime).toBeUndefined();
   });
 
   test("falls back to canonical label when override matches base model", async () => {
@@ -119,7 +161,7 @@ describe("buildBrowserConfig", () => {
 
   test("parses remoteChrome host targets", async () => {
     const config = await buildBrowserConfig({
-      model: "gpt-5.2-pro",
+      model: "gpt-5.5-pro",
       remoteChrome: "remote-host:9333",
     });
     expect(config.remoteChrome).toEqual({ host: "remote-host", port: 9_333 });
@@ -145,7 +187,7 @@ describe("buildBrowserConfig", () => {
   test("rejects temporary chat URLs when targeting Pro", async () => {
     await expect(
       buildBrowserConfig({
-        model: "gpt-5.2-pro",
+        model: "gpt-5.5-pro",
         chatgptUrl: "https://chatgpt.com/?temporary-chat=true",
       }),
     ).rejects.toThrow(/Temporary Chat/i);
@@ -153,7 +195,7 @@ describe("buildBrowserConfig", () => {
 
   test("allows temporary chat URLs when model strategy keeps current selection", async () => {
     const config = await buildBrowserConfig({
-      model: "gpt-5.2-pro",
+      model: "gpt-5.5-pro",
       chatgptUrl: "https://chatgpt.com/?temporary-chat=true",
       browserModelStrategy: "current",
     });
@@ -172,7 +214,7 @@ describe("buildBrowserConfig", () => {
 
   test("accepts IPv6 remoteChrome targets wrapped in brackets", async () => {
     const config = await buildBrowserConfig({
-      model: "gpt-5.2-pro",
+      model: "gpt-5.5-pro",
       remoteChrome: "[2001:db8::1]:9222",
     });
     expect(config.remoteChrome).toEqual({ host: "2001:db8::1", port: 9_222 });
@@ -181,7 +223,7 @@ describe("buildBrowserConfig", () => {
   test("rejects malformed remoteChrome targets", async () => {
     await expect(
       buildBrowserConfig({
-        model: "gpt-5.2-pro",
+        model: "gpt-5.5-pro",
         remoteChrome: "just-a-host",
       }),
     ).rejects.toThrow(/host:port/i);
@@ -190,7 +232,7 @@ describe("buildBrowserConfig", () => {
   test("rejects remoteChrome IPv6 without brackets", async () => {
     await expect(
       buildBrowserConfig({
-        model: "gpt-5.2-pro",
+        model: "gpt-5.5-pro",
         remoteChrome: "2001:db8::1:9222",
       }),
     ).rejects.toThrow(/Wrap IPv6 addresses/i);
@@ -199,7 +241,7 @@ describe("buildBrowserConfig", () => {
   test("rejects out-of-range remoteChrome ports", async () => {
     await expect(
       buildBrowserConfig({
-        model: "gpt-5.2-pro",
+        model: "gpt-5.5-pro",
         remoteChrome: "server:70000",
       }),
     ).rejects.toThrow(/between 1 and 65535/i);
@@ -208,13 +250,27 @@ describe("buildBrowserConfig", () => {
 
 describe("resolveBrowserModelLabel", () => {
   test("returns canonical ChatGPT label when CLI value matches API model", () => {
-    expect(resolveBrowserModelLabel("gpt-5.5-pro", "gpt-5.5-pro")).toBe("Extended Pro");
-    expect(resolveBrowserModelLabel("gpt-5.4-pro", "gpt-5.4-pro")).toBe("Extended Pro");
+    expect(resolveBrowserModelLabel("gpt-5.5-pro", "gpt-5.5-pro")).toBe("Pro");
     expect(resolveBrowserModelLabel("gpt-5.4", "gpt-5.4")).toBe("Thinking 5.4");
-    expect(resolveBrowserModelLabel("gpt-5-pro", "gpt-5-pro")).toBe("Extended Pro");
-    expect(resolveBrowserModelLabel("gpt-5.2-pro", "gpt-5.2-pro")).toBe("Extended Pro");
-    expect(resolveBrowserModelLabel("gpt-5.1-pro", "gpt-5.1-pro")).toBe("Extended Pro");
     expect(resolveBrowserModelLabel("GPT-5.1", "gpt-5.1")).toBe("GPT-5.2");
+  });
+
+  test("rejects legacy Pro aliases in browser mode", async () => {
+    for (const model of ["gpt-5.4-pro", "gpt-5.2-pro", "gpt-5.1-pro", "gpt-5-pro"]) {
+      await expect(buildBrowserConfig({ model })).rejects.toThrow(/supports only gpt-5\.5-pro/i);
+      expect(() => resolveBrowserModelLabel(model, model)).toThrow(/supports only gpt-5\.5-pro/i);
+    }
+  });
+
+  test("rejects legacy Pro picker labels in browser mode", async () => {
+    for (const label of ["GPT-5.4 Pro", "GPT-5.2 Pro", "GPT-5.1 Pro", "GPT-5 Pro"]) {
+      await expect(
+        buildBrowserConfig({ model: "gpt-5.5-pro", browserModelLabel: label }),
+      ).rejects.toThrow(/supports only gpt-5\.5-pro/i);
+      expect(() => resolveBrowserModelLabel(label, "gpt-5.5-pro")).toThrow(
+        /supports only gpt-5\.5-pro/i,
+      );
+    }
   });
 
   test("falls back to canonical label when input is empty", () => {
@@ -226,7 +282,7 @@ describe("resolveBrowserModelLabel", () => {
   });
 
   test("supports undefined or whitespace-only input", () => {
-    expect(resolveBrowserModelLabel(undefined, "gpt-5.2-pro")).toBe("Extended Pro");
+    expect(resolveBrowserModelLabel(undefined, "gpt-5.5-pro")).toBe("Pro");
     expect(resolveBrowserModelLabel("   ", "gpt-5.1")).toBe("GPT-5.2");
   });
 

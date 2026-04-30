@@ -138,7 +138,11 @@ export async function runOracle(
     if (isOpenRouterBaseUrl(baseUrl) || openRouterFallback) {
       return { key: optionsApiKey ?? openRouterApiKey, source: "OPENROUTER_API_KEY" };
     }
-    if (typeof model === "string" && model.startsWith("gpt")) {
+    if (
+      provider === "openai" ||
+      (typeof model === "string" &&
+        (model.startsWith("gpt") || model.startsWith("o3") || model.startsWith("o4")))
+    ) {
       if (optionsApiKey) return { key: optionsApiKey, source: "apiKey option" };
       if (isAzureOpenAI) {
         const key = process.env.AZURE_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
@@ -167,7 +171,10 @@ export async function runOracle(
     const envVar =
       isOpenRouterBaseUrl(baseUrl) || openRouterFallback
         ? "OPENROUTER_API_KEY"
-        : options.model.startsWith("gpt")
+        : provider === "openai" ||
+            options.model.startsWith("gpt") ||
+            options.model.startsWith("o3") ||
+            options.model.startsWith("o4")
           ? isAzureOpenAI
             ? "AZURE_OPENAI_API_KEY (or OPENAI_API_KEY)"
             : "OPENAI_API_KEY"
@@ -216,6 +223,12 @@ export async function runOracle(
     maxFileSizeBytes: options.maxFileSizeBytes,
   });
   const searchEnabled = options.search !== false;
+  if (modelConfig.requiresSearch && !searchEnabled) {
+    throw new PromptValidationError(
+      `${modelConfig.model} requires at least one data-source tool. Oracle currently provides web search for deep research, so omit --search off or enable --search on.`,
+      { model: modelConfig.model, search: false },
+    );
+  }
   logVerbose(`cwd: ${cwd}`);
   let pendingNoFilesTip: string | null = null;
   let pendingShortPromptTip: string | null = null;

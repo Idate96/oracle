@@ -11,6 +11,8 @@ export const PRO_MODELS = new Set<ProModelName>([
   "gpt-5.1-pro",
   "gpt-5-pro",
   "gpt-5.2-pro",
+  "o3-deep-research",
+  "o4-mini-deep-research",
   "claude-4.5-sonnet",
   "claude-4.1-opus",
 ]);
@@ -132,6 +134,34 @@ export const MODEL_CONFIGS: Record<KnownModelName, ModelConfig> = {
       outputPerToken: 180 / 1_000_000,
     },
     reasoning: { effort: "xhigh" },
+  },
+  "o3-deep-research": {
+    model: "o3-deep-research",
+    provider: "openai",
+    tokenizer: countTokensGpt5Pro as TokenizerFn,
+    inputLimit: 200000,
+    pricing: {
+      inputPerToken: 10 / 1_000_000,
+      outputPerToken: 40 / 1_000_000,
+    },
+    reasoning: null,
+    supportsBackground: true,
+    supportsSearch: true,
+    requiresSearch: true,
+  },
+  "o4-mini-deep-research": {
+    model: "o4-mini-deep-research",
+    provider: "openai",
+    tokenizer: countTokensGpt5Pro as TokenizerFn,
+    inputLimit: 200000,
+    pricing: {
+      inputPerToken: 2 / 1_000_000,
+      outputPerToken: 8 / 1_000_000,
+    },
+    reasoning: null,
+    supportsBackground: true,
+    supportsSearch: true,
+    requiresSearch: true,
   },
   "gemini-3.1-pro": {
     model: "gemini-3.1-pro",

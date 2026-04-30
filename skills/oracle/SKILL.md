@@ -9,12 +9,12 @@ Oracle bundles your prompt + selected files into one “one-shot” request so a
 
 ## Main use case (browser, GPT-5.5 Pro)
 
-Default workflow here: `--engine browser` with the exact ChatGPT picker label `GPT-5.5 Pro`. This is the “human in the loop” path: it can take ~10 minutes to ~1 hour; expect a stored session you can reattach to.
+Default workflow here: `--engine browser` with the ChatGPT picker label `Pro` and `--browser-thinking-time extended` for GPT-5.5 Pro. This is the “human in the loop” path: it can take ~10 minutes to ~1 hour; expect a stored session you can reattach to.
 
 Recommended defaults:
 
 - Engine: browser (`--engine browser`)
-- Model: `--browser-model-label "GPT-5.5 Pro"` with `--browser-model-strategy select`
+- Model: `--browser-model-label "Pro" --browser-thinking-time extended` with `--browser-model-strategy select`
 - Attachments: directories/globs + excludes; avoid secrets and upload repo-scale reviews as ZIP archives.
 
 ## Golden path (fast + reliable)
@@ -38,8 +38,17 @@ Recommended defaults:
   - `npx -y @steipete/oracle --dry-run summary --files-report -p "<task>" --file "src/**"`
 
 - Browser run (main path; long-running is normal):
-  - `npx -y @steipete/oracle --engine browser --browser-model-strategy select --browser-model-label "GPT-5.5 Pro" --browser-attachments always --browser-bundle-files -p "<task>" --file "src/**"`
-  - For large reviews: `npx -y @steipete/oracle --engine browser --browser-model-strategy select --browser-model-label "GPT-5.5 Pro" --browser-attachments always --browser-bundle-files -p "<task>" --file . --file "!**/node_modules/**" --file "!**/dist/**" --file "!**/.venv/**"`
+  - `npx -y @steipete/oracle --engine browser --browser-model-strategy select --browser-model-label "Pro" --browser-thinking-time extended --browser-attachments always --browser-bundle-files -p "<task>" --file "src/**"`
+  - For large reviews: `npx -y @steipete/oracle --engine browser --browser-model-strategy select --browser-model-label "Pro" --browser-thinking-time extended --browser-attachments always --browser-bundle-files -p "<task>" --file . --file "!**/node_modules/**" --file "!**/dist/**" --file "!**/.venv/**"`
+
+- Deep Research API run (only after explicit user consent because it uses paid API tokens):
+  - `npx -y @steipete/oracle --engine api --model o3-deep-research -p "<research question>"`
+  - Faster/cheaper option: `npx -y @steipete/oracle --engine api --model o4-mini-deep-research -p "<research question>"`
+  - API Deep Research uses OpenAI model ids `o3-deep-research` / `o4-mini-deep-research`, uses web search by default, and will reject `--search off` because Oracle does not yet expose file-search/vector-store or remote-MCP data sources.
+
+- ChatGPT browser Deep research run (uses the Plus/tools menu, not API tokens):
+  - `npx -y @steipete/oracle --engine browser --browser-deep-research -p "<research question>"`
+  - Shorthand: `npx -y @steipete/oracle --engine browser --model deepresearch -p "<research question>"`
 
 - Manual paste fallback (assemble bundle, copy to clipboard):
   - `npx -y @steipete/oracle --render --copy -p "<task>" --file "src/**"`
@@ -73,7 +82,7 @@ Recommended defaults:
 ## Engines (API vs browser)
 
 - Auto-pick: uses `api` when `OPENAI_API_KEY` is set, otherwise `browser`.
-- Browser engine supports GPT + Gemini only; use `--engine api` for Claude/Grok/Codex or multi-model runs.
+- Browser engine supports GPT + Gemini only; use `--engine api` for Claude/Grok/Codex, API Deep Research, or multi-model runs. Use `--browser-deep-research` for ChatGPT's browser Deep research composer mode.
 - **API runs require explicit user consent** before starting because they incur usage costs.
 - Browser attachments:
   - `--browser-attachments auto|never|always` (auto pastes inline up to ~60k chars then uploads).

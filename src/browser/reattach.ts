@@ -31,6 +31,7 @@ import {
   alignPromptEchoMarkdown,
   type TargetInfoLite,
 } from "./reattachHelpers.js";
+import { captureDeepResearchReportIfAvailable } from "./deepResearchReport.js";
 
 export interface ReattachDeps {
   listTargets?: () => Promise<TargetInfoLite[]>;
@@ -142,13 +143,25 @@ export async function resumeBrowserSession(
       minTurnIndex,
       timeoutMs,
     );
+    const sandboxReport = await captureDeepResearchReportIfAvailable({
+      chromeHost: host,
+      chromePort: runtime.chromePort,
+      enabled: config?.composerMode === "deep-research",
+      logger,
+    });
+    const recoveredText =
+      sandboxReport && sandboxReport.length > recovered.text.trim().length
+        ? sandboxReport
+        : recovered.text;
     const markdown =
+      sandboxReport ??
       (await withTimeout(
         captureMarkdown(Runtime, recovered.meta, logger),
         15_000,
         "Reattach markdown capture timed out",
-      )) ?? recovered.text;
-    const aligned = alignPromptEchoMarkdown(recovered.text, markdown, promptEcho, logger);
+      )) ??
+      recoveredText;
+    const aligned = alignPromptEchoMarkdown(recoveredText, markdown, promptEcho, logger);
 
     if (client && typeof client.close === "function") {
       try {
@@ -258,8 +271,19 @@ async function resumeBrowserSessionViaNewChrome(
     minTurnIndex,
     timeoutMs,
   );
-  const markdown = (await captureMarkdown(Runtime, recovered.meta, logger)) ?? recovered.text;
-  const aligned = alignPromptEchoMarkdown(recovered.text, markdown, promptEcho, logger);
+  const sandboxReport = await captureDeepResearchReportIfAvailable({
+    chromeHost,
+    chromePort: chrome.port,
+    enabled: resolved.composerMode === "deep-research",
+    logger,
+  });
+  const recoveredText =
+    sandboxReport && sandboxReport.length > recovered.text.trim().length
+      ? sandboxReport
+      : recovered.text;
+  const markdown =
+    sandboxReport ?? (await captureMarkdown(Runtime, recovered.meta, logger)) ?? recoveredText;
+  const aligned = alignPromptEchoMarkdown(recoveredText, markdown, promptEcho, logger);
 
   if (client && typeof client.close === "function") {
     try {

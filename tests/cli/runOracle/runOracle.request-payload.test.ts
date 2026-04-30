@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { runOracle } from "@src/oracle.ts";
-import { MockClient, MockStream, buildResponse } from "./helpers.ts";
+import { MockBackgroundClient, MockClient, MockStream, buildResponse } from "./helpers.ts";
 
 describe("runOracle request payload", () => {
   test("maps gpt-5.1-pro alias to gpt-5.5-pro API model", async () => {
@@ -64,6 +64,48 @@ describe("runOracle request payload", () => {
       },
     );
     expect(client.lastRequest?.tools).toEqual([{ type: "web_search_preview" }]);
+  });
+
+  test("deep research uses background mode with web search by default", async () => {
+    const finalResponse = buildResponse();
+    const initialResponse = { ...finalResponse, status: "in_progress", output: [] };
+    const client = new MockBackgroundClient([initialResponse, finalResponse]);
+    await runOracle(
+      {
+        prompt: "Deep research run",
+        model: "o3-deep-research",
+      },
+      {
+        apiKey: "sk-test",
+        client,
+        log: () => {},
+        wait: async () => {},
+      },
+    );
+    expect(client.createdBodies[0]?.model).toBe("o3-deep-research");
+    expect(client.createdBodies[0]?.background).toBe(true);
+    expect(client.createdBodies[0]?.store).toBe(true);
+    expect(client.createdBodies[0]?.tools).toEqual([{ type: "web_search_preview" }]);
+  });
+
+  test("deep research rejects search disabled because Oracle has no other data-source tool", async () => {
+    const stream = new MockStream([], buildResponse());
+    const client = new MockClient(stream);
+    await expect(
+      runOracle(
+        {
+          prompt: "Deep research run",
+          model: "o4-mini-deep-research",
+          search: false,
+          background: false,
+        },
+        {
+          apiKey: "sk-test",
+          client,
+          log: () => {},
+        },
+      ),
+    ).rejects.toThrow(/requires at least one data-source tool/i);
   });
 
   test("passes baseUrl through to clientFactory", async () => {

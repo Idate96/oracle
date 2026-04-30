@@ -13,6 +13,7 @@ describe("browser thinking-time selection expression", () => {
     expect(expression).toContain("normalize");
     expect(expression).toContain("extended");
     expect(expression).toContain("standard");
+    expect(expression).toContain("model-switcher-gpt-5-5-pro-thinking-effort");
   });
 
   it("targets the requested thinking time level", () => {
