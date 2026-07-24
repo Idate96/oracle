@@ -2,6 +2,7 @@ export * from "./oracle/types.js";
 export {
   MODEL_CONFIGS,
   DEFAULT_MODEL,
+  CURRENT_BROWSER_PRO_MODEL,
   PRO_MODELS,
   DEFAULT_SYSTEM_PROMPT,
   TOKENIZER_OPTIONS,

@@ -52,7 +52,7 @@ import { copyToClipboard } from "../src/cli/clipboard.js";
 import { buildMarkdownBundle } from "../src/cli/markdownBundle.js";
 import { shouldDetachSession } from "../src/cli/detach.js";
 import { applyHiddenAliases } from "../src/cli/hiddenAliases.js";
-import { buildBrowserConfig } from "../src/cli/browserConfig.js";
+import { buildBrowserConfig, normalizeChatGptModelForBrowser } from "../src/cli/browserConfig.js";
 import { performSessionRun } from "../src/cli/sessionRunner.js";
 import type { BrowserSessionRunnerDeps } from "../src/browser/sessionRunner.js";
 import { isMediaFile } from "../src/browser/prompt.js";
@@ -304,7 +304,7 @@ program
   .option("-s, --slug <words>", "Custom session slug (3-5 words).")
   .option(
     "-m, --model <model>",
-    "Model to target (gpt-5.5-pro default). Browser Pro mode supports only gpt-5.5-pro; API also supports o3-deep-research/o4-mini-deep-research, aliases such as gpt-5.1-pro/gpt-5.2-pro/gpt-5.4-pro, plus gpt-5.4, gpt-5.2, gemini-3-pro, claude-4.5-sonnet, and OpenRouter ids.",
+    "Model to target (gpt-5.5-pro API default; browser Pro is gpt-5.6-pro). API also supports o3-deep-research/o4-mini-deep-research, aliases such as gpt-5.1-pro/gpt-5.2-pro/gpt-5.4-pro, plus gpt-5.4, gpt-5.2, gemini-3-pro, claude-4.5-sonnet, and OpenRouter ids.",
     normalizeModelOption,
   )
   .addOption(
@@ -1428,7 +1428,12 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     throw new Error("--remote-host does not support --models yet. Use API engine locally instead.");
   }
   const resolvedModel: ModelName =
-    normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate);
+    normalizedMultiModels[0] ??
+    (isGemini
+      ? resolveApiModel(cliModelArg)
+      : engine === "browser"
+        ? normalizeChatGptModelForBrowser(resolvedModelCandidate)
+        : resolvedModelCandidate);
   const includesGeminiApiOnly = (
     normalizedMultiModels.length > 0 ? normalizedMultiModels : [resolvedModel]
   ).some((model) => model === "gemini-3.1-pro");

@@ -13,6 +13,7 @@ import {
 import { normalizeBrowserModelStrategy } from "../browser/modelStrategy.js";
 import type { BrowserComposerMode, BrowserModelStrategy } from "../browser/types.js";
 import type { CookieParam } from "../browser/types.js";
+import { CURRENT_BROWSER_PRO_MODEL } from "../oracle/config.js";
 import { getOracleHomeDir } from "../oracleHome.js";
 import { isDeepResearchModelAlias } from "./options.js";
 
@@ -26,6 +27,7 @@ const DEFAULT_CHROME_PROFILE = "Default";
 // The browser label is passed to the model picker which fuzzy-matches against ChatGPT's UI.
 const BROWSER_MODEL_LABELS: [ModelName, string][] = [
   // Most specific first (e.g., "gpt-5.2-thinking" before "gpt-5.2")
+  [CURRENT_BROWSER_PRO_MODEL, "Pro"],
   ["gpt-5.5-pro", "Pro"],
   ["gpt-5.2-thinking", "GPT-5.2 Thinking"],
   ["gpt-5.2-instant", "GPT-5.2 Instant"],
@@ -86,6 +88,12 @@ export function normalizeChatGptModelForBrowser(model: ModelName): ModelName {
     return normalized;
   }
 
+  // ChatGPT's Pro picker tracks the current website model. Keep the API's
+  // gpt-5.5-pro default separate, but record browser Pro runs as GPT-5.6 Pro.
+  if (normalized === "gpt-5.5-pro" || normalized === CURRENT_BROWSER_PRO_MODEL) {
+    return CURRENT_BROWSER_PRO_MODEL;
+  }
+
   if (isUnsupportedBrowserProAlias(normalized)) {
     throwUnsupportedBrowserProAlias(model);
   }
@@ -120,7 +128,9 @@ function normalizePickerLabel(label: string): string {
 }
 
 function defaultThinkingTimeForBrowserModel(model: ModelName): ThinkingTimeLevel | undefined {
-  return normalizeChatGptModelForBrowser(model) === "gpt-5.5-pro" ? "extended" : undefined;
+  return normalizeChatGptModelForBrowser(model) === CURRENT_BROWSER_PRO_MODEL
+    ? "extended"
+    : undefined;
 }
 
 export function normalizeBrowserModelLabelOverride(label: string | undefined): {
@@ -155,6 +165,8 @@ export function normalizeBrowserModelLabelOverride(label: string | undefined): {
     normalized === "gpt 5 5 pro" ||
     normalized === "chatgpt 5 5 pro" ||
     normalized === "5 5 pro";
+  const isCurrentProAlias =
+    normalized === "gpt 5 6 pro" || normalized === "chatgpt 5 6 pro" || normalized === "5 6 pro";
 
   if (isUnsupportedExplicitProAlias) {
     throwUnsupportedBrowserProAlias(trimmed);
@@ -162,7 +174,7 @@ export function normalizeBrowserModelLabelOverride(label: string | undefined): {
   if (isProAlias) {
     return { label: "Pro" };
   }
-  if (isLegacyExtendedProAlias) {
+  if (isLegacyExtendedProAlias || isCurrentProAlias) {
     return { label: "Pro", thinkingTime: "extended" };
   }
 
@@ -322,7 +334,7 @@ function selectBrowserPort(options: BrowserFlagOptions): number | null {
 
 function throwUnsupportedBrowserProAlias(model: ModelName): never {
   throw new Error(
-    `Unsupported ChatGPT browser Pro model "${model}". Browser Pro selection supports only gpt-5.5-pro; use --model gpt-5.5-pro or --browser-model-label "Pro" --browser-thinking-time extended.`,
+    `Unsupported ChatGPT browser Pro model "${model}". Browser Pro selection uses ${CURRENT_BROWSER_PRO_MODEL}; use --model ${CURRENT_BROWSER_PRO_MODEL} or --browser-model-label "Pro" --browser-thinking-time extended.`,
   );
 }
 

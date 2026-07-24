@@ -121,7 +121,9 @@ function buildModelSelectionExpression(
       .filter(Boolean);
     const targetWords = normalizedTarget.split(' ').filter(Boolean);
     const targetIsBarePro = normalizedTarget === 'pro';
-    const desiredVersion = normalizedTarget.includes('5 5') || targetIsBarePro
+    const desiredVersion = normalizedTarget.includes('5 6') || targetIsBarePro
+      ? '5-6'
+      : normalizedTarget.includes('5 5')
       ? '5-5'
       : normalizedTarget.includes('5 4')
       ? '5-4'
@@ -170,6 +172,7 @@ function buildModelSelectionExpression(
       const normalizedLabel = normalizeText(getButtonLabel());
       if (!normalizedLabel) return false;
       if (desiredVersion) {
+        if (desiredVersion === '5-6' && !normalizedLabel.includes('5 6')) return false;
         if (desiredVersion === '5-5' && !normalizedLabel.includes('5 5')) return false;
         if (desiredVersion === '5-4' && !normalizedLabel.includes('5 4')) return false;
         if (desiredVersion === '5-2' && !normalizedLabel.includes('5 2')) return false;
@@ -231,6 +234,12 @@ function buildModelSelectionExpression(
       if (normalizedTestId) {
         if (desiredVersion) {
           // data-testid strings have been observed with both dotted and dashed versions (e.g. gpt-5.2-pro vs gpt-5-2-pro).
+          const has56 =
+            normalizedTestId.includes('5-6') ||
+            normalizedTestId.includes('5.6') ||
+            normalizedTestId.includes('gpt-5-6') ||
+            normalizedTestId.includes('gpt-5.6') ||
+            normalizedTestId.includes('gpt56');
           const has52 =
             normalizedTestId.includes('5-2') ||
             normalizedTestId.includes('5.2') ||
@@ -261,7 +270,7 @@ function buildModelSelectionExpression(
             normalizedTestId.includes('gpt-5-0') ||
             normalizedTestId.includes('gpt-5.0') ||
             normalizedTestId.includes('gpt50');
-          const candidateVersion = has55 ? '5-5' : has54 ? '5-4' : has52 ? '5-2' : has51 ? '5-1' : has50 ? '5-0' : null;
+          const candidateVersion = has56 ? '5-6' : has55 ? '5-5' : has54 ? '5-4' : has52 ? '5-2' : has51 ? '5-1' : has50 ? '5-0' : null;
           // If a candidate advertises a different version, ignore it entirely.
           if (candidateVersion && candidateVersion !== desiredVersion) {
             return 0;
@@ -487,6 +496,22 @@ function buildModelMatchersLiteral(targetModel: string): {
   push(`chatgpt ${dotless}`, labelTokens);
   push(`gpt ${base}`, labelTokens);
   push(`gpt ${dotless}`, labelTokens);
+  // Numeric variations (5.6 <-> 56 <-> gpt-5-6)
+  if (base.includes("5.6") || base.includes("5-6") || base.includes("56")) {
+    push("5.6", labelTokens);
+    push("gpt-5.6", labelTokens);
+    push("gpt5.6", labelTokens);
+    push("gpt-5-6", labelTokens);
+    push("gpt5-6", labelTokens);
+    push("gpt56", labelTokens);
+    push("chatgpt 5.6", labelTokens);
+    if (!base.includes("pro")) {
+      testIdTokens.add("model-switcher-gpt-5-6");
+    }
+    testIdTokens.add("gpt-5-6");
+    testIdTokens.add("gpt5-6");
+    testIdTokens.add("gpt56");
+  }
   // Numeric variations (5.5 <-> 55 <-> gpt-5-5)
   if (base.includes("5.5") || base.includes("5-5") || base.includes("55")) {
     push("5.5", labelTokens);
@@ -582,10 +607,21 @@ function buildModelMatchersLiteral(targetModel: string): {
     push("research grade", labelTokens);
     push("advanced reasoning", labelTokens);
     if (base === "pro" || base === "extended pro") {
+      testIdTokens.add("model-switcher-gpt-5-6-pro");
+      testIdTokens.add("gpt-5-6-pro");
+      testIdTokens.add("gpt-5.6-pro");
+      testIdTokens.add("gpt56pro");
+      // Keep the previous website id as a fallback during staged rollouts.
       testIdTokens.add("model-switcher-gpt-5-5-pro");
       testIdTokens.add("gpt-5-5-pro");
       testIdTokens.add("gpt-5.5-pro");
       testIdTokens.add("gpt55pro");
+    }
+    if (base.includes("5.6") || base.includes("5-6") || base.includes("56")) {
+      testIdTokens.add("model-switcher-gpt-5-6-pro");
+      testIdTokens.add("gpt-5.6-pro");
+      testIdTokens.add("gpt-5-6-pro");
+      testIdTokens.add("gpt56pro");
     }
     if (base.includes("5.5") || base.includes("5-5") || base.includes("55")) {
       testIdTokens.add("model-switcher-gpt-5-5-pro");

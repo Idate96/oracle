@@ -3,7 +3,7 @@ import { parseDuration } from "../browserMode.js";
 import path from "node:path";
 import fg from "fast-glob";
 import type { ModelName, PreviewMode } from "../oracle.js";
-import { DEFAULT_MODEL, MODEL_CONFIGS } from "../oracle.js";
+import { CURRENT_BROWSER_PRO_MODEL, DEFAULT_MODEL, MODEL_CONFIGS } from "../oracle.js";
 
 export function collectPaths(
   value: string | string[] | undefined,
@@ -216,6 +216,11 @@ function resolveDeepResearchAlias(normalized: string): ModelName {
 
 export function resolveApiModel(modelValue: string): ModelName {
   const normalized = normalizeModelOption(modelValue).toLowerCase();
+  if ((normalized.includes("5.6") || normalized.includes("5_6")) && normalized.includes("pro")) {
+    throw new InvalidArgumentError(
+      "gpt-5.6-pro is currently a ChatGPT browser model. Use --engine browser.",
+    );
+  }
   if (normalized in MODEL_CONFIGS) {
     return normalized as ModelName;
   }
@@ -325,6 +330,9 @@ export function inferModelFromLabel(modelValue: string): ModelName {
   if (normalized.includes("classic")) {
     return "gpt-5-pro";
   }
+  if ((normalized.includes("5.6") || normalized.includes("5_6")) && normalized.includes("pro")) {
+    return CURRENT_BROWSER_PRO_MODEL;
+  }
   if ((normalized.includes("5.5") || normalized.includes("5_5")) && normalized.includes("pro")) {
     return "gpt-5.5-pro";
   }
@@ -367,7 +375,7 @@ export function inferModelFromLabel(modelValue: string): ModelName {
     return "gpt-5.1-pro";
   }
   if (normalized.includes("pro")) {
-    return DEFAULT_MODEL;
+    return CURRENT_BROWSER_PRO_MODEL;
   }
   if (normalized.includes("5.1") || normalized.includes("5_1")) {
     return "gpt-5.1";

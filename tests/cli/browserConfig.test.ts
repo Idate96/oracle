@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { buildBrowserConfig, resolveBrowserModelLabel } from "../../src/cli/browserConfig.js";
+import { normalizeChatGptModelForBrowser } from "../../src/cli/browserConfig.js";
 
 describe("buildBrowserConfig", () => {
   test("uses defaults when optional flags omitted", async () => {
@@ -20,6 +21,14 @@ describe("buildBrowserConfig", () => {
       debug: undefined,
       allowCookieErrors: true,
     });
+  });
+
+  test("normalizes browser Pro runs to GPT-5.6 Pro", async () => {
+    expect(normalizeChatGptModelForBrowser("gpt-5.5-pro")).toBe("gpt-5.6-pro");
+    expect(normalizeChatGptModelForBrowser("gpt-5.6-pro")).toBe("gpt-5.6-pro");
+    const config = await buildBrowserConfig({ model: "gpt-5.6-pro" });
+    expect(config.desiredModel).toBe("Pro");
+    expect(config.thinkingTime).toBe("extended");
   });
 
   test("maps gpt-5.4 browser runs to Thinking 5.4", async () => {
@@ -257,8 +266,8 @@ describe("resolveBrowserModelLabel", () => {
 
   test("rejects legacy Pro aliases in browser mode", async () => {
     for (const model of ["gpt-5.4-pro", "gpt-5.2-pro", "gpt-5.1-pro", "gpt-5-pro"]) {
-      await expect(buildBrowserConfig({ model })).rejects.toThrow(/supports only gpt-5\.5-pro/i);
-      expect(() => resolveBrowserModelLabel(model, model)).toThrow(/supports only gpt-5\.5-pro/i);
+      await expect(buildBrowserConfig({ model })).rejects.toThrow(/uses gpt-5\.6-pro/i);
+      expect(() => resolveBrowserModelLabel(model, model)).toThrow(/uses gpt-5\.6-pro/i);
     }
   });
 
@@ -266,10 +275,8 @@ describe("resolveBrowserModelLabel", () => {
     for (const label of ["GPT-5.4 Pro", "GPT-5.2 Pro", "GPT-5.1 Pro", "GPT-5 Pro"]) {
       await expect(
         buildBrowserConfig({ model: "gpt-5.5-pro", browserModelLabel: label }),
-      ).rejects.toThrow(/supports only gpt-5\.5-pro/i);
-      expect(() => resolveBrowserModelLabel(label, "gpt-5.5-pro")).toThrow(
-        /supports only gpt-5\.5-pro/i,
-      );
+      ).rejects.toThrow(/uses gpt-5\.6-pro/i);
+      expect(() => resolveBrowserModelLabel(label, "gpt-5.5-pro")).toThrow(/uses gpt-5\.6-pro/i);
     }
   });
 

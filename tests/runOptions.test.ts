@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveRunOptionsFromConfig } from "../src/cli/runOptions.js";
 import { estimateRequestTokens } from "../src/oracle/tokenEstimate.js";
-import { DEFAULT_MODEL, MODEL_CONFIGS } from "../src/oracle/config.js";
+import { CURRENT_BROWSER_PRO_MODEL, DEFAULT_MODEL, MODEL_CONFIGS } from "../src/oracle/config.js";
 
 describe("resolveRunOptionsFromConfig", () => {
   const basePrompt = "This prompt is comfortably above twenty characters.";
@@ -24,9 +24,18 @@ describe("resolveRunOptionsFromConfig", () => {
     expect(resolvedEngine).toBe("api");
   });
 
-  it("defaults to gpt-5.5-pro when model not provided", () => {
+  it("defaults browser runs to the current ChatGPT Pro model", () => {
     const { runOptions } = resolveRunOptionsFromConfig({
       prompt: basePrompt,
+      env: {},
+    });
+    expect(runOptions.model).toBe(CURRENT_BROWSER_PRO_MODEL);
+  });
+
+  it("keeps the gpt-5.5-pro API default when API is selected", () => {
+    const { runOptions } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      engine: "api",
     });
     expect(runOptions.model).toBe(DEFAULT_MODEL);
   });
@@ -141,7 +150,7 @@ describe("resolveRunOptionsFromConfig", () => {
     });
     expect(resolvedEngine).toBe("browser");
     expect(engineCoercedToApi).toBe(false);
-    expect(runOptions.model).toBe(DEFAULT_MODEL);
+    expect(runOptions.model).toBe(CURRENT_BROWSER_PRO_MODEL);
     expect(runOptions.browserComposerMode).toBe("deep-research");
   });
 
@@ -183,7 +192,7 @@ describe("resolveRunOptionsFromConfig", () => {
       engine: "browser",
     });
     expect(resolvedEngine).toBe("browser");
-    expect(runOptions.model).toBe(DEFAULT_MODEL);
+    expect(runOptions.model).toBe(CURRENT_BROWSER_PRO_MODEL);
     expect(runOptions.browserComposerMode).toBe("deep-research");
   });
 

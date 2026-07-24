@@ -5,6 +5,7 @@ import { countTokens as countTokensAnthropicRaw } from "@anthropic-ai/tokenizer"
 import { stringifyTokenizerInput } from "./tokenStringifier.js";
 
 export const DEFAULT_MODEL: ModelName = "gpt-5.5-pro";
+export const CURRENT_BROWSER_PRO_MODEL: ModelName = "gpt-5.6-pro";
 export const PRO_MODELS = new Set<ProModelName>([
   "gpt-5.5-pro",
   "gpt-5.4-pro",

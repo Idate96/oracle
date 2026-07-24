@@ -9,9 +9,19 @@ const expectContains = (arr: string[], value: string) => {
 };
 
 describe("browser model selection matchers", () => {
-  it("maps bare Pro to the GPT-5.5 Pro picker option", () => {
+  it("maps bare Pro to the GPT-5.6 Pro picker option with a GPT-5.5 fallback", () => {
     const { testIdTokens } = buildModelMatchersLiteralForTest("Pro");
+    expect(testIdTokens).toContain("model-switcher-gpt-5-6-pro");
     expect(testIdTokens).toContain("model-switcher-gpt-5-5-pro");
+  });
+
+  it("includes pro + 5.6 tokens for GPT-5.6 Pro", () => {
+    const { labelTokens, testIdTokens } = buildModelMatchersLiteralForTest("GPT-5.6 Pro");
+    expect(labelTokens.some((t) => t.includes("pro"))).toBe(true);
+    expect(labelTokens.some((t) => t.includes("5.6") || t.includes("5-6"))).toBe(true);
+    expect(testIdTokens.some((t) => t.includes("gpt-5.6-pro") || t.includes("gpt-5-6-pro"))).toBe(
+      true,
+    );
   });
 
   it("includes pro + 5.5 tokens for GPT-5.5 Pro", () => {
